@@ -5224,6 +5224,29 @@ func _wrapped_paths_packed(paths: Array[String]) -> PackedStringArray:
 		out.append(path)
 	return out
 
+func _script_has_rewritten_methods(script: GDScript) -> bool:
+	if script == null:
+		return false
+	for m in script.get_script_method_list():
+		if str(m["name"]).begins_with("_rtv_vanilla_"):
+			return true
+	return false
+
+func _compile_rewritten_source_for_path(path: String, source: String) -> GDScript:
+	if source.is_empty():
+		return null
+	var fresh := GDScript.new()
+	fresh.source_code = source
+	var err := fresh.reload()
+	if err != OK:
+		_log_critical("[OrcKitCodegen] activate %s: direct source compile failed (%s)" % [path, error_string(err)])
+		return null
+	if not _script_has_rewritten_methods(fresh):
+		_log_critical("[OrcKitCodegen] activate %s: direct source compile lacks renames -- rewrite isn't compiling" % path)
+		return null
+	fresh.take_over_path(path)
+	return fresh
+
 func _generate_hook_pack(defer_activation: bool = false) -> String:
 	var hook_dir := ProjectSettings.globalize_path(HOOK_PACK_DIR)
 	DirAccess.make_dir_recursive_absolute(hook_dir)
@@ -5537,11 +5560,7 @@ func _activate_rewritten_scripts(script_paths: Array[String], pack_path: String)
 		if c == null:
 			pre_d += 1
 			continue
-		var pre_rename := false
-		for m in c.get_script_method_list():
-			if str(m["name"]).begins_with("_rtv_vanilla_"):
-				pre_rename = true
-				break
+		var pre_rename := _script_has_rewritten_methods(c)
 		var srclen: int = c.source_code.length()
 		if pre_rename:
 			pre_a += 1
@@ -5570,20 +5589,14 @@ func _activate_rewritten_scripts(script_paths: Array[String], pack_path: String)
 			_log_warning("[OrcKitCodegen] activate %s: load returned null -- skip" % vp)
 			continue
 
-		var already_live := false
-		for m in cached.get_script_method_list():
-			if str(m["name"]).begins_with("_rtv_vanilla_"):
-				already_live = true
-				break
+		var already_live := _script_has_rewritten_methods(cached)
 		if already_live:
 			var fresh_source := FileAccess.get_file_as_string(vp)
 			if not fresh_source.is_empty() and fresh_source != cached.source_code:
-				_log_info("[OrcKitCodegen] activate %s: cached rewrite is stale (static-init had an older pack), forcing fresh+take_over_path" % vp)
-				var fresh := ResourceLoader.load(vp, "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+				_log_info("[OrcKitCodegen] activate %s: cached rewrite is stale (static-init had an older pack), compiling generated source directly" % vp)
+				var fresh := _compile_rewritten_source_for_path(vp, fresh_source)
 				if fresh == null:
-					_log_critical("[OrcKitCodegen] activate %s: fresh load returned null -- skip" % vp)
 					continue
-				fresh.take_over_path(vp)
 				activated += 1
 				continue
 			preactivated += 1
@@ -5598,27 +5611,13 @@ func _activate_rewritten_scripts(script_paths: Array[String], pack_path: String)
 		var err := cached.reload()
 		if err != OK:
 			_log_warning("[OrcKitCodegen] activate %s: reload failed (%s)" % [vp, error_string(err)])
-		var has_rename := false
-		for m in cached.get_script_method_list():
-			if str(m["name"]).begins_with("_rtv_vanilla_"):
-				has_rename = true
-				break
+		var has_rename := _script_has_rewritten_methods(cached)
 		if not has_rename:
-			_log_info("[OrcKitCodegen] activate %s: reload didn't apply (pre-compiled); falling back to fresh+take_over_path" % vp)
-			var fresh := ResourceLoader.load(vp, "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+			_log_info("[OrcKitCodegen] activate %s: reload didn't apply (pre-compiled or live instances); compiling generated source directly" % vp)
+			var fresh := _compile_rewritten_source_for_path(vp, our_source)
 			if fresh == null:
-				_log_critical("[OrcKitCodegen] activate %s: fresh load returned null -- skip" % vp)
 				continue
-			var fresh_has_rename := false
-			for m in fresh.get_script_method_list():
-				if str(m["name"]).begins_with("_rtv_vanilla_"):
-					fresh_has_rename = true
-					break
-			if not fresh_has_rename:
-				_log_critical("[OrcKitCodegen] activate %s: fresh load also lacks renames -- rewrite isn't compiling" % vp)
-				continue
-			fresh.take_over_path(vp)
-			_log_info("[OrcKitCodegen] activate %s: fresh script took over game path" % vp)
+			_log_info("[OrcKitCodegen] activate %s: direct compiled script took over game path" % vp)
 		activated += 1
 	var eager_total := script_paths.size() - _scripts_with_scene_preloads.size()
 	_log_info("[OrcKitCodegen] Activated %d/%d rewritten script(s) (%d already live from static-init preload; %d deferred to lazy-compile)" \
@@ -5793,6 +5792,7 @@ func _activate_rewritten_scripts(script_paths: Array[String], pack_path: String)
 				base = base.get_base_script() as GDScript
 				depth += 1
 	)
+
 
 
 func _ready() -> void:
