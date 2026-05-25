@@ -21,7 +21,12 @@ func _script_has_rewritten_methods(script: GDScript) -> bool:
 func _strip_class_name_for_direct_compile(source: String) -> String:
 	var out := PackedStringArray()
 	for line in source.split("\n"):
-		if line.strip_edges().begins_with("class_name "):
+		var trimmed := line.strip_edges()
+		if trimmed.begins_with("class_name "):
+			var extends_idx := trimmed.find(" extends ")
+			if extends_idx >= 0:
+				var indent_len := line.length() - line.strip_edges(true, false).length()
+				out.append(line.substr(0, indent_len) + trimmed.substr(extends_idx + 1))
 			continue
 		out.append(line)
 	return "\n".join(out)
@@ -29,15 +34,10 @@ func _strip_class_name_for_direct_compile(source: String) -> String:
 func _compile_rewritten_source_for_path(path: String, source: String) -> GDScript:
 	if source.is_empty():
 		return null
+	var direct_source := _strip_class_name_for_direct_compile(source)
 	var fresh := GDScript.new()
-	fresh.source_code = source
+	fresh.source_code = direct_source
 	var err := fresh.reload()
-	if err != OK:
-		var retry_source := _strip_class_name_for_direct_compile(source)
-		if retry_source != source:
-			fresh = GDScript.new()
-			fresh.source_code = retry_source
-			err = fresh.reload()
 	if err != OK:
 		_log_critical("[OrcKitCodegen] activate %s: direct source compile failed (%s)" % [path, error_string(err)])
 		return null

@@ -167,10 +167,11 @@ func _rtv_rewrite_vanilla_source(source: String, parsed: Dictionary, method_mask
 	var autofix := _rtv_autofix_legacy_syntax(src)
 	src = autofix["source"]
 	var af_total: int = int(autofix["bodyless"]) + int(autofix["tool"]) \
-			+ int(autofix["onready"]) + int(autofix["export"]) + int(autofix.get("base", 0))
+			+ int(autofix["onready"]) + int(autofix["export"]) + int(autofix.get("base", 0)) \
+			+ int(autofix.get("infer_assign", 0)) + int(autofix.get("node_shorthand", 0))
 	if af_total > 0:
-		_log_info("[Autofix] %s: %d bodyless, %d @tool, %d @onready, %d @export, %d base()->super -- legacy syntax normalized" \
-				% [parsed.get("filename", "?"), autofix["bodyless"], autofix["tool"], autofix["onready"], autofix["export"], autofix.get("base", 0)])
+		_log_info("[Autofix] %s: %d bodyless, %d @tool, %d @onready, %d @export, %d base()->super, %d inferred assignments, %d node shorthands -- legacy syntax normalized" \
+				% [parsed.get("filename", "?"), autofix["bodyless"], autofix["tool"], autofix["onready"], autofix["export"], autofix.get("base", 0), autofix.get("infer_assign", 0), autofix.get("node_shorthand", 0)])
 
 
 	var lines: PackedStringArray = src.split("\n")
@@ -291,12 +292,20 @@ func _rtv_autofix_legacy_syntax(source: String) -> Dictionary:
 	var fix_onready := 0
 	var fix_export := 0
 	var fix_base := 0
+	var fix_infer_assign := 0
+	var fix_node_shorthand := 0
 
 	var current_method: String = ""
 	var method_line_indent: String = ""
 
 	for i in lines.size():
 		var line: String = lines[i]
+		if line.find(": =") >= 0:
+			line = line.replace(": =", " := ")
+			fix_infer_assign += 1
+		if line.find("% ") >= 0 or line.find("$ ") >= 0:
+			line = line.replace("% ", "%").replace("$ ", "$")
+			fix_node_shorthand += 1
 
 		var lead := _rtv_leading_indent(line)
 		if lead.is_empty() and not line.strip_edges().is_empty():
@@ -362,6 +371,8 @@ func _rtv_autofix_legacy_syntax(source: String) -> Dictionary:
 		"onready": fix_onready,
 		"export": fix_export,
 		"base": fix_base,
+		"infer_assign": fix_infer_assign,
+		"node_shorthand": fix_node_shorthand,
 	}
 
 func _rtv_rewrite_bare_base(line: String, method_name: String) -> String:
@@ -541,7 +552,8 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 		out += "%sif not _lib._hooked_bases.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
 		out += "%sif _lib._developer_mode:\n" % I1
-		out += "%s_lib._dispatch_counts[\"%s\"] = int(_lib._dispatch_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
+		out += "%svar _counts: Dictionary = _lib._dispatch_counts\n" % I2
+		out += "%s_counts[\"%s\"] = int(_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
 		out += "%sif _lib._wrapper_active.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
 		out += "%s_lib._wrapper_active[\"%s\"] = true\n" % [I1, hook_base]
@@ -581,7 +593,8 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2
 		out += "%sif _lib._developer_mode:\n" % I1
-		out += "%s_lib._dispatch_counts[\"%s\"] = int(_lib._dispatch_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
+		out += "%svar _counts: Dictionary = _lib._dispatch_counts\n" % I2
+		out += "%s_counts[\"%s\"] = int(_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
 		out += "%sif _lib._wrapper_active.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2

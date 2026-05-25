@@ -4,12 +4,9 @@ const _MENU_HOOK_NAME := "menu-_ready-post"
 const _MODS_BUTTON_NAME := "OrcKitMods"
 
 func _seed_core_hooks() -> void:
-	if not _hooked_methods.has(_MENU_SCRIPT_PATH):
-		_hooked_methods[_MENU_SCRIPT_PATH] = {}
-	(_hooked_methods[_MENU_SCRIPT_PATH] as Dictionary)["_ready"] = true
+	pass
 
 func _register_core_hooks() -> void:
-	hook(_MENU_HOOK_NAME, _on_menu_ready, 100)
 	var tree := get_tree()
 	if tree == null:
 		return

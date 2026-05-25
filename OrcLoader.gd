@@ -2,7 +2,6 @@
 extends Node
 
 
-
 const MODLOADER_VERSION := "1.0.0"
 
 const MODLOADER_RES_PATH := "res://OrcLoader.gd"
@@ -3435,7 +3434,6 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 	return outer
 
 
-
 static func version() -> String:
 	return MODLOADER_VERSION
 
@@ -3642,7 +3640,6 @@ func _get_hooks(hook_name: String) -> Array:
 	for entry in _hooks[hook_name]:
 		callbacks.append(entry["callback"])
 	return callbacks
-
 
 
 const Registry := {
@@ -3926,7 +3923,6 @@ func register_ai_loadout(entries: Dictionary) -> Dictionary: return _generic_bun
 
 func _scene_nodes_connect_listener() -> void:
 	pass
-
 
 
 func setup(plan: Array) -> Dictionary:
@@ -4459,7 +4455,6 @@ func _probe_gdsc_version() -> int:
 	return -1
 
 
-
 const GAME_SCRIPT_PATHS: Array[String] = [
 	"res://abilities/missile/missile.gd",
 	"res://abilities/strafing_run/strafing_run.gd",
@@ -4919,10 +4914,11 @@ func _rtv_rewrite_vanilla_source(source: String, parsed: Dictionary, method_mask
 	var autofix := _rtv_autofix_legacy_syntax(src)
 	src = autofix["source"]
 	var af_total: int = int(autofix["bodyless"]) + int(autofix["tool"]) \
-			+ int(autofix["onready"]) + int(autofix["export"]) + int(autofix.get("base", 0))
+			+ int(autofix["onready"]) + int(autofix["export"]) + int(autofix.get("base", 0)) \
+			+ int(autofix.get("infer_assign", 0)) + int(autofix.get("node_shorthand", 0))
 	if af_total > 0:
-		_log_info("[Autofix] %s: %d bodyless, %d @tool, %d @onready, %d @export, %d base()->super -- legacy syntax normalized" \
-				% [parsed.get("filename", "?"), autofix["bodyless"], autofix["tool"], autofix["onready"], autofix["export"], autofix.get("base", 0)])
+		_log_info("[Autofix] %s: %d bodyless, %d @tool, %d @onready, %d @export, %d base()->super, %d inferred assignments, %d node shorthands -- legacy syntax normalized" \
+				% [parsed.get("filename", "?"), autofix["bodyless"], autofix["tool"], autofix["onready"], autofix["export"], autofix.get("base", 0), autofix.get("infer_assign", 0), autofix.get("node_shorthand", 0)])
 
 
 	var lines: PackedStringArray = src.split("\n")
@@ -5043,12 +5039,20 @@ func _rtv_autofix_legacy_syntax(source: String) -> Dictionary:
 	var fix_onready := 0
 	var fix_export := 0
 	var fix_base := 0
+	var fix_infer_assign := 0
+	var fix_node_shorthand := 0
 
 	var current_method: String = ""
 	var method_line_indent: String = ""
 
 	for i in lines.size():
 		var line: String = lines[i]
+		if line.find(": =") >= 0:
+			line = line.replace(": =", " := ")
+			fix_infer_assign += 1
+		if line.find("% ") >= 0 or line.find("$ ") >= 0:
+			line = line.replace("% ", "%").replace("$ ", "$")
+			fix_node_shorthand += 1
 
 		var lead := _rtv_leading_indent(line)
 		if lead.is_empty() and not line.strip_edges().is_empty():
@@ -5114,6 +5118,8 @@ func _rtv_autofix_legacy_syntax(source: String) -> Dictionary:
 		"onready": fix_onready,
 		"export": fix_export,
 		"base": fix_base,
+		"infer_assign": fix_infer_assign,
+		"node_shorthand": fix_node_shorthand,
 	}
 
 func _rtv_rewrite_bare_base(line: String, method_name: String) -> String:
@@ -5293,7 +5299,8 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 		out += "%sif not _lib._hooked_bases.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
 		out += "%sif _lib._developer_mode:\n" % I1
-		out += "%s_lib._dispatch_counts[\"%s\"] = int(_lib._dispatch_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
+		out += "%svar _counts: Dictionary = _lib._dispatch_counts\n" % I2
+		out += "%s_counts[\"%s\"] = int(_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
 		out += "%sif _lib._wrapper_active.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
 		out += "%s_lib._wrapper_active[\"%s\"] = true\n" % [I1, hook_base]
@@ -5333,7 +5340,8 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2
 		out += "%sif _lib._developer_mode:\n" % I1
-		out += "%s_lib._dispatch_counts[\"%s\"] = int(_lib._dispatch_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
+		out += "%svar _counts: Dictionary = _lib._dispatch_counts\n" % I2
+		out += "%s_counts[\"%s\"] = int(_counts.get(\"%s\", 0)) + 1\n" % [I2, hook_base, hook_base]
 		out += "%sif _lib._wrapper_active.has(\"%s\"):\n" % [I1, hook_base]
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2
@@ -5360,7 +5368,6 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 	return out
 
 
-
 const REGISTRY_TARGETS: Array[String] = []
 
 func _is_registry_target(filename: String) -> bool:
@@ -5383,7 +5390,12 @@ func _script_has_rewritten_methods(script: GDScript) -> bool:
 func _strip_class_name_for_direct_compile(source: String) -> String:
 	var out := PackedStringArray()
 	for line in source.split("\n"):
-		if line.strip_edges().begins_with("class_name "):
+		var trimmed := line.strip_edges()
+		if trimmed.begins_with("class_name "):
+			var extends_idx := trimmed.find(" extends ")
+			if extends_idx >= 0:
+				var indent_len := line.length() - line.strip_edges(true, false).length()
+				out.append(line.substr(0, indent_len) + trimmed.substr(extends_idx + 1))
 			continue
 		out.append(line)
 	return "\n".join(out)
@@ -5391,15 +5403,10 @@ func _strip_class_name_for_direct_compile(source: String) -> String:
 func _compile_rewritten_source_for_path(path: String, source: String) -> GDScript:
 	if source.is_empty():
 		return null
+	var direct_source := _strip_class_name_for_direct_compile(source)
 	var fresh := GDScript.new()
-	fresh.source_code = source
+	fresh.source_code = direct_source
 	var err := fresh.reload()
-	if err != OK:
-		var retry_source := _strip_class_name_for_direct_compile(source)
-		if retry_source != source:
-			fresh = GDScript.new()
-			fresh.source_code = retry_source
-			err = fresh.reload()
 	if err != OK:
 		_log_critical("[OrcKitCodegen] activate %s: direct source compile failed (%s)" % [path, error_string(err)])
 		return null
@@ -5956,7 +5963,6 @@ func _activate_rewritten_scripts(script_paths: Array[String], pack_path: String)
 	)
 
 
-
 func _ready() -> void:
 	if _has_loaded:
 		return
@@ -6154,18 +6160,14 @@ func _run_pass_2() -> void:
 			return
 
 
-
 const _MENU_SCRIPT_PATH := "res://menu/menu.gd"
 const _MENU_HOOK_NAME := "menu-_ready-post"
 const _MODS_BUTTON_NAME := "OrcKitMods"
 
 func _seed_core_hooks() -> void:
-	if not _hooked_methods.has(_MENU_SCRIPT_PATH):
-		_hooked_methods[_MENU_SCRIPT_PATH] = {}
-	(_hooked_methods[_MENU_SCRIPT_PATH] as Dictionary)["_ready"] = true
+	pass
 
 func _register_core_hooks() -> void:
-	hook(_MENU_HOOK_NAME, _on_menu_ready, 100)
 	var tree := get_tree()
 	if tree == null:
 		return
