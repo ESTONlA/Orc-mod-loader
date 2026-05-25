@@ -14,6 +14,10 @@ It loads mods from the game folder, adds a native **Mods** button to the main me
 - Developer Mode for loose folder mod testing
 - Uses `OrcLoader.gd` as the loader entrypoint
 
+## mod template
+https://github.com/ESTONlA/modmenu
+
+
 ## Supported Game
 
 This loader targets:
