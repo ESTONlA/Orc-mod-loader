@@ -533,9 +533,9 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 	var out := ""
 	if not is_void:
 		out += "%s\n" % sig
-		out += "%sif not Engine.has_meta(\"RTVModLib\"):\n" % I1
+		out += "%sif not Engine.has_meta(\"OrcmodLib\"):\n" % I1
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
-		out += "%svar _lib = Engine.get_meta(\"RTVModLib\")\n" % I1
+		out += "%svar _lib = Engine.get_meta(\"OrcmodLib\")\n" % I1
 		out += "%sif not _lib._any_mod_hooked:\n" % I1
 		out += "%sreturn %s%s\n" % [I2, aw, vanilla_call]
 		out += "%sif not _lib._hooked_bases.has(\"%s\"):\n" % [I1, hook_base]
@@ -570,10 +570,10 @@ func _rtv_dispatch_inline_src(fe: Dictionary, prefix: String, indent: String = "
 		out += "%sreturn _result\n" % I1
 	else:
 		out += "%s\n" % sig
-		out += "%sif not Engine.has_meta(\"RTVModLib\"):\n" % I1
+		out += "%sif not Engine.has_meta(\"OrcmodLib\"):\n" % I1
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2
-		out += "%svar _lib = Engine.get_meta(\"RTVModLib\")\n" % I1
+		out += "%svar _lib = Engine.get_meta(\"OrcmodLib\")\n" % I1
 		out += "%sif not _lib._any_mod_hooked:\n" % I1
 		out += "%s%s%s\n" % [I2, aw, vanilla_call]
 		out += "%sreturn\n" % I2

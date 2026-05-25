@@ -11,19 +11,19 @@ static func minor_version() -> int:
 static func patch_version() -> int:
 	return int(MODLOADER_VERSION.split(".")[2])
 
-func _register_rtv_modlib_meta() -> void:
-	if Engine.has_meta("RTVModLib"):
-		_log_warning("[RTVModLib] Engine.meta 'RTVModLib' already set -- not overwriting")
+func _register_orcmodlib_meta() -> void:
+	if Engine.has_meta("OrcmodLib"):
+		_log_warning("[OrcmodLib] Engine.meta 'OrcmodLib' already set -- not overwriting")
 		return
-	Engine.set_meta("RTVModLib", self)
-	_log_info("[RTVModLib] modloader registered as Engine.meta('RTVModLib')")
+	Engine.set_meta("OrcmodLib", self)
+	_log_info("[OrcmodLib] modloader registered as Engine.meta('OrcmodLib')")
 
 func _emit_frameworks_ready() -> void:
 	_is_ready = true
 	_register_core_hooks()
 	_scene_nodes_connect_listener()
 	frameworks_ready.emit()
-	_log_info("[RTVModLib] frameworks_ready emitted")
+	_log_info("[OrcmodLib] frameworks_ready emitted")
 	_verify_script_overrides()
 
 static func _hook_base_of(hook_name: String) -> String:
@@ -42,7 +42,7 @@ func hook(hook_name: String, callback: Callable, priority: int = 100) -> int:
 			or hook_name.ends_with("-callback"))
 	if is_replace and _hooks.has(hook_name) and (_hooks[hook_name] as Array).size() > 0:
 		var owner_id: int = (_hooks[hook_name] as Array)[0]["id"]
-		_log_debug("[RTVModLib] replace hook '%s' already owned (id=%d), registration rejected" \
+		_log_debug("[OrcmodLib] replace hook '%s' already owned (id=%d), registration rejected" \
 				% [hook_name, owner_id])
 		return -1
 	if not _hooks.has(hook_name):
@@ -182,7 +182,7 @@ func _dispatch_post(hook_name: String, args: Array, current_result: Variant) -> 
 			var warn_key: String = "%s::%d" % [hook_name, cb.get_object_id()]
 			if not _post_legacy_warned.has(warn_key):
 				_post_legacy_warned[warn_key] = true
-				_log_warning("[RTVModLib] post hook '%s' callback uses legacy %d-arg signature (expected %d for non-void wrapper). Add a trailing _result param to your callback to receive + optionally mutate the return value; the legacy form will be removed in a future major version." \
+				_log_warning("[OrcmodLib] post hook '%s' callback uses legacy %d-arg signature (expected %d for non-void wrapper). Add a trailing _result param to your callback to receive + optionally mutate the return value; the legacy form will be removed in a future major version." \
 						% [hook_name, argc, expected_with_result])
 			cb.callv(args)
 		if ret != null:

@@ -339,7 +339,7 @@ func _read_vanilla_source(script_path: String) -> String:
 	if source.is_empty():
 		return ""
 
-	if "_rtv_ready_done" in source or 'Engine.get_meta("RTVModLib"' in source:
+	if "_rtv_ready_done" in source or 'Engine.get_meta("OrcmodLib"' in source:
 		_log_critical("[Hooks] Detokenized source for %s already contains rewrite markers -- possible stale overlay. Delete %s and restart." \
 				% [script_path, ProjectSettings.globalize_path(HOOK_PACK_DIR)])
 		return ""

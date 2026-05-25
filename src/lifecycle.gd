@@ -85,7 +85,7 @@ func _run_pass_1() -> void:
 		_log_info("Preparing two-pass restart -- %d archive(s)" % archive_paths.size())
 		if sections.prepend.size() > 0:
 			_log_info("  %d early autoload(s) written after OrcKit in [autoload]" % sections.prepend.size())
-		_register_rtv_modlib_meta()
+		_register_orcmodlib_meta()
 		_generate_hook_pack(true)
 		_write_heartbeat()
 		var err := _write_override_cfg(sections.prepend)
@@ -109,7 +109,7 @@ func _run_pass_1() -> void:
 
 func _finish_with_existing_mounts() -> void:
 	_boot_complete = true
-	_register_rtv_modlib_meta()
+	_register_orcmodlib_meta()
 	_generate_hook_pack()
 	for entry in _pending_autoloads:
 		if get_tree().root.has_node(entry["name"]):
@@ -130,7 +130,7 @@ func _finish_with_existing_mounts() -> void:
 
 func _finish_single_pass() -> void:
 	_boot_complete = true
-	_register_rtv_modlib_meta()
+	_register_orcmodlib_meta()
 	_generate_hook_pack()
 	for entry in _pending_autoloads:
 		_instantiate_autoload(entry["mod_name"], entry["name"], entry["path"])
@@ -173,7 +173,7 @@ func _run_pass_2() -> void:
 	_load_ui_config()
 
 	load_all_mods("Pass 2")
-	_register_rtv_modlib_meta()
+	_register_orcmodlib_meta()
 	_generate_hook_pack()
 	for entry in _pending_autoloads:
 		if get_tree().root.has_node(entry["name"]):
