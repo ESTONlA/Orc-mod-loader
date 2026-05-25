@@ -427,19 +427,19 @@ func show_mod_ui() -> void:
 
 	var shade := ColorRect.new()
 	shade.name = "Backdrop"
-	shade.color = Color(0.0, 0.0, 0.0, 0.42)
+	shade.color = Color(0.0, 0.0, 0.0, 0.58)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(shade)
 
 	var win := Panel.new()
 	win.name = "OrcKitPanel"
-	win.custom_minimum_size = Vector2(1040, 660)
+	win.custom_minimum_size = Vector2(1120, 700)
 	win.set_anchors_preset(Control.PRESET_CENTER)
-	win.offset_left = -520
-	win.offset_top = -330
-	win.offset_right = 520
-	win.offset_bottom = 330
+	win.offset_left = -560
+	win.offset_top = -350
+	win.offset_right = 560
+	win.offset_bottom = 350
 	overlay.add_child(win)
 
 	_ui_window = overlay
@@ -447,89 +447,116 @@ func show_mod_ui() -> void:
 	var dark_theme := make_dark_theme()
 	overlay.theme = dark_theme
 	win.theme = dark_theme
-	var win_style := _ui_box(Color(0.025, 0.032, 0.026, 0.97), Color(0.38, 0.48, 0.31), 0, 8)
+	var win_style := _ui_box(Color(0.018, 0.024, 0.020, 0.98), Color(0.34, 0.46, 0.25), 0, 8)
 	win_style.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
-	win_style.shadow_size = 18
-	win_style.shadow_offset = Vector2(0, 6)
+	win_style.shadow_size = 24
+	win_style.shadow_offset = Vector2(0, 8)
 	win.add_theme_stylebox_override("panel", win_style)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.theme = dark_theme
 	win.add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 10)
+	root.add_theme_constant_override("separation", 12)
 	margin.add_child(root)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 14)
 	root.add_child(header)
 
+	var mark := PanelContainer.new()
+	mark.custom_minimum_size = Vector2(62, 62)
+	mark.add_theme_stylebox_override("panel", _ui_box(Color(0.12, 0.19, 0.08), Color(0.50, 0.68, 0.32), 0, 8))
+	header.add_child(mark)
+
+	var mark_label := Label.new()
+	mark_label.text = "OK"
+	mark_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mark_label.add_theme_font_size_override("font_size", 23)
+	mark_label.add_theme_color_override("font_color", Color(0.93, 1.0, 0.72))
+	mark.add_child(mark_label)
+
 	var title_stack := VBoxContainer.new()
-	title_stack.add_theme_constant_override("separation", 1)
+	title_stack.add_theme_constant_override("separation", 2)
 	title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title_stack)
 
 	var title := Label.new()
-	title.text = "ORCKIT"
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color(0.88, 0.96, 0.70))
+	title.text = "OrcKit"
+	title.add_theme_font_size_override("font_size", 29)
+	title.add_theme_color_override("font_color", Color(0.92, 1.0, 0.76))
 	title_stack.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "Sir, We Have an Orc Problem Playtest mod deployment"
+	subtitle.text = "Mod loadout manager for Sir, We Have an Orc Problem Playtest"
 	subtitle.add_theme_font_size_override("font_size", 12)
-	subtitle.modulate = Color(0.62, 0.68, 0.55)
+	subtitle.modulate = Color(0.64, 0.70, 0.58)
 	title_stack.add_child(subtitle)
 
+	var enabled_count := 0
+	var warning_count := 0
+	for entry in _ui_mod_entries:
+		if bool(entry.get("enabled", false)):
+			enabled_count += 1
+		warning_count += (entry.get("warnings", []) as Array).size()
+
 	var status_box := PanelContainer.new()
-	status_box.add_theme_stylebox_override("panel", _ui_box(Color(0.04, 0.055, 0.04), Color(0.22, 0.30, 0.20), 8, 6))
+	status_box.add_theme_stylebox_override("panel", _ui_box(Color(0.040, 0.056, 0.036), Color(0.22, 0.32, 0.17), 10, 7))
 	header.add_child(status_box)
 	var status_lbl := Label.new()
-	status_lbl.text = str(_ui_mod_entries.size()) + " mods scanned"
+	status_lbl.text = str(enabled_count) + " armed / " + str(_ui_mod_entries.size()) + " found"
 	status_lbl.add_theme_font_size_override("font_size", 11)
-	status_lbl.add_theme_color_override("font_color", Color(0.74, 0.86, 0.60))
+	status_lbl.add_theme_color_override("font_color", Color(0.78, 0.90, 0.62))
 	status_box.add_child(status_lbl)
 
 	var version_box := PanelContainer.new()
-	version_box.add_theme_stylebox_override("panel", _ui_box(Color(0.035, 0.04, 0.036), Color(0.18, 0.23, 0.17), 8, 6))
+	version_box.add_theme_stylebox_override("panel", _ui_box(Color(0.034, 0.042, 0.036), Color(0.17, 0.23, 0.15), 10, 7))
 	header.add_child(version_box)
 	var version_lbl := Label.new()
-	version_lbl.text = "v" + MODLOADER_VERSION
+	version_lbl.text = "OrcKit " + MODLOADER_VERSION
 	version_lbl.add_theme_font_size_override("font_size", 11)
-	version_lbl.modulate = Color(0.58, 0.64, 0.52)
+	version_lbl.modulate = Color(0.62, 0.68, 0.56)
 	version_box.add_child(version_lbl)
 
-	root.add_child(HSeparator.new())
+	if warning_count > 0:
+		var warn_box := PanelContainer.new()
+		warn_box.add_theme_stylebox_override("panel", _ui_box(Color(0.11, 0.075, 0.035), Color(0.42, 0.27, 0.10), 10, 7))
+		header.add_child(warn_box)
+		var warn_lbl := Label.new()
+		warn_lbl.text = str(warning_count) + " warning(s)"
+		warn_lbl.add_theme_font_size_override("font_size", 11)
+		warn_lbl.modulate = Color(1.0, 0.76, 0.42)
+		warn_box.add_child(warn_lbl)
 
 	var tabs := TabContainer.new()
+	tabs.tabs_visible = false
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(tabs)
 
-	root.add_child(HSeparator.new())
-
 	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 10)
+	bottom.add_theme_constant_override("separation", 12)
 	root.add_child(bottom)
 
 	var hint := Label.new()
-	hint.text = "Ready. Higher load order wins when mods touch the same file."
+	hint.text = "Ready. Later load order wins when mods touch the same resource."
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 11)
-	hint.modulate = Color(0.56, 0.62, 0.50)
+	hint.modulate = Color(0.57, 0.64, 0.52)
 	bottom.add_child(hint)
 	_ui_hint_label = hint
 
 	var launch_btn := Button.new()
 	launch_btn.text = "  Launch Game  "
-	launch_btn.custom_minimum_size = Vector2(180, 40)
-	_ui_button_style(launch_btn, Color(0.18, 0.28, 0.13), Color(0.52, 0.68, 0.34), Color(0.25, 0.38, 0.18), Color(0.12, 0.19, 0.09))
+	launch_btn.custom_minimum_size = Vector2(230, 44)
+	_ui_button_style(launch_btn, Color(0.20, 0.31, 0.13), Color(0.58, 0.74, 0.35), Color(0.28, 0.42, 0.18), Color(0.13, 0.20, 0.09))
 
 	bottom.add_child(launch_btn)
 	_ui_launch_btn = launch_btn
@@ -750,81 +777,159 @@ func make_dark_theme() -> Theme:
 	return t
 
 func build_mods_tab(tabs: TabContainer) -> Control:
-	var outer := VBoxContainer.new()
+	var outer := HBoxContainer.new()
+	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	outer.add_theme_constant_override("separation", 10)
+	outer.add_theme_constant_override("separation", 14)
+	var on_vanilla := false
 
+	var total_count := _ui_mod_entries.size()
+	var enabled_count := 0
+	var warning_count := 0
+	var risky_count := 0
+	for entry in _ui_mod_entries:
+		if bool(entry.get("enabled", false)):
+			enabled_count += 1
+		warning_count += (entry.get("warnings", []) as Array).size()
+		if int(entry.get("risk_level", 0)) == 2:
+			risky_count += 1
 
-	var toolbar := HBoxContainer.new()
-	toolbar.add_theme_constant_override("separation", 8)
-	outer.add_child(toolbar)
+	var rail := VBoxContainer.new()
+	rail.custom_minimum_size.x = 220
+	rail.add_theme_constant_override("separation", 10)
+	outer.add_child(rail)
+
+	var rail_card := PanelContainer.new()
+	rail_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rail_card.add_theme_stylebox_override("panel", _ui_box(Color(0.026, 0.034, 0.028), Color(0.13, 0.18, 0.11), 0, 8))
+	rail.add_child(rail_card)
+
+	var rail_pad := MarginContainer.new()
+	rail_pad.add_theme_constant_override("margin_left", 12)
+	rail_pad.add_theme_constant_override("margin_right", 12)
+	rail_pad.add_theme_constant_override("margin_top", 12)
+	rail_pad.add_theme_constant_override("margin_bottom", 12)
+	rail_card.add_child(rail_pad)
+
+	var rail_body := VBoxContainer.new()
+	rail_body.add_theme_constant_override("separation", 12)
+	rail_pad.add_child(rail_body)
+
+	var rail_title := Label.new()
+	rail_title.text = "LOADOUT"
+	rail_title.add_theme_font_size_override("font_size", 12)
+	rail_title.add_theme_color_override("font_color", Color(0.84, 0.96, 0.62))
+	rail_body.add_child(rail_title)
+
+	var enabled_stat := PanelContainer.new()
+	enabled_stat.add_theme_stylebox_override("panel", _ui_box(Color(0.045, 0.066, 0.038), Color(0.24, 0.35, 0.17), 10, 7))
+	rail_body.add_child(enabled_stat)
+	var enabled_box := VBoxContainer.new()
+	enabled_box.add_theme_constant_override("separation", 1)
+	enabled_stat.add_child(enabled_box)
+	var enabled_value := Label.new()
+	enabled_value.text = str(enabled_count)
+	enabled_value.add_theme_font_size_override("font_size", 26)
+	enabled_value.add_theme_color_override("font_color", Color(0.91, 1.0, 0.72))
+	enabled_box.add_child(enabled_value)
+	var enabled_label := Label.new()
+	enabled_label.text = "armed mods"
+	enabled_label.modulate = Color(0.60, 0.68, 0.52)
+	enabled_label.add_theme_font_size_override("font_size", 11)
+	enabled_box.add_child(enabled_label)
+
+	var total_stat := PanelContainer.new()
+	total_stat.add_theme_stylebox_override("panel", _ui_box(Color(0.034, 0.044, 0.036), Color(0.16, 0.22, 0.14), 10, 7))
+	rail_body.add_child(total_stat)
+	var total_box := VBoxContainer.new()
+	total_box.add_theme_constant_override("separation", 1)
+	total_stat.add_child(total_box)
+	var total_value := Label.new()
+	total_value.text = str(total_count)
+	total_value.add_theme_font_size_override("font_size", 20)
+	total_value.add_theme_color_override("font_color", Color(0.80, 0.88, 0.68))
+	total_box.add_child(total_value)
+	var total_label := Label.new()
+	total_label.text = "installed packages"
+	total_label.modulate = Color(0.55, 0.62, 0.50)
+	total_label.add_theme_font_size_override("font_size", 11)
+	total_box.add_child(total_label)
+
+	var warning_text := str(warning_count) + " warnings"
+	if risky_count > 0:
+		warning_text += " / " + str(risky_count) + " risky"
+	var warn_stat := PanelContainer.new()
+	warn_stat.add_theme_stylebox_override("panel", _ui_box(Color(0.050, 0.044, 0.032), Color(0.22, 0.18, 0.10), 10, 7))
+	rail_body.add_child(warn_stat)
+	var warn_lbl := Label.new()
+	warn_lbl.text = warning_text
+	warn_lbl.add_theme_font_size_override("font_size", 12)
+	warn_lbl.modulate = Color(0.96, 0.78, 0.46) if warning_count > 0 or risky_count > 0 else Color(0.55, 0.62, 0.50)
+	warn_stat.add_child(warn_lbl)
+
+	var rail_spacer := Control.new()
+	rail_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rail_body.add_child(rail_spacer)
 
 	var open_btn := Button.new()
-	open_btn.text = "Mods Folder"
-	toolbar.add_child(open_btn)
+	open_btn.text = "Open Mods Folder"
+	open_btn.custom_minimum_size.y = 34
+	rail_body.add_child(open_btn)
 	open_btn.pressed.connect(func():
 		OS.shell_open(ProjectSettings.globalize_path(_mods_dir))
 	)
 	_wire_hint(open_btn, "Open the game's mods folder in your file manager.")
 
-	var on_vanilla := false
+	var all_btn := Button.new()
+	all_btn.text = "Enable Visible"
+	all_btn.tooltip_text = "Enable every visible mod"
+	all_btn.disabled = on_vanilla
+	all_btn.custom_minimum_size.y = 34
+	rail_body.add_child(all_btn)
+	_wire_hint(all_btn, "Enable every visible mod (respects the search filter).")
 
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	toolbar.add_child(spacer)
+	var none_btn := Button.new()
+	none_btn.text = "Disable Visible"
+	none_btn.tooltip_text = "Disable every visible mod"
+	none_btn.disabled = on_vanilla
+	none_btn.custom_minimum_size.y = 34
+	rail_body.add_child(none_btn)
+	_wire_hint(none_btn, "Disable every visible mod (respects the search filter).")
 
 	var dev_check := CheckBox.new()
 	dev_check.text = "Developer Mode"
 	dev_check.tooltip_text = "Enables verbose logging, conflict report, and loose folder loading"
 	dev_check.button_pressed = _developer_mode
 	dev_check.add_theme_font_size_override("font_size", 11)
-	dev_check.modulate = Color(0.58, 0.64, 0.52)
-	toolbar.add_child(dev_check)
+	dev_check.modulate = Color(0.66, 0.72, 0.60)
+	rail_body.add_child(dev_check)
 	_wire_hint(dev_check, "Developer Mode: verbose logging, conflict report, and loose folder loading.")
 
-	dev_check.toggled.connect(func(on: bool):
-		_developer_mode = on
-		_ui_mod_entries = collect_mod_metadata()
-		_load_ui_config()
-		_rebuild_mods_tab(tabs)
-	)
+	var main_col := VBoxContainer.new()
+	main_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_col.add_theme_constant_override("separation", 10)
+	outer.add_child(main_col)
 
-	outer.add_child(HSeparator.new())
-
-	var split := HSplitContainer.new()
-	split.split_offset = 610
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	outer.add_child(split)
-
-
-	var left_col := VBoxContainer.new()
-	left_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_child(left_col)
-
+	var top_card := PanelContainer.new()
+	top_card.add_theme_stylebox_override("panel", _ui_box(Color(0.026, 0.034, 0.028), Color(0.13, 0.18, 0.11), 0, 8))
+	main_col.add_child(top_card)
+	var top_pad := MarginContainer.new()
+	top_pad.add_theme_constant_override("margin_left", 12)
+	top_pad.add_theme_constant_override("margin_right", 12)
+	top_pad.add_theme_constant_override("margin_top", 10)
+	top_pad.add_theme_constant_override("margin_bottom", 10)
+	top_card.add_child(top_pad)
 	var filter_bar := HBoxContainer.new()
-	filter_bar.add_theme_constant_override("separation", 6)
-	left_col.add_child(filter_bar)
+	filter_bar.add_theme_constant_override("separation", 8)
+	top_pad.add_child(filter_bar)
 
 	var filter_edit := LineEdit.new()
-	filter_edit.placeholder_text = "Filter mods..."
+	filter_edit.placeholder_text = "Search installed mods..."
 	filter_edit.text = _mods_filter_text
 	filter_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	filter_edit.custom_minimum_size.y = 34
 	filter_bar.add_child(filter_edit)
-
-	var all_btn := Button.new()
-	all_btn.text = "All"
-	all_btn.tooltip_text = "Enable every visible mod"
-	all_btn.disabled = on_vanilla
-	filter_bar.add_child(all_btn)
-	_wire_hint(all_btn, "Enable every visible mod (respects the search filter).")
-
-	var none_btn := Button.new()
-	none_btn.text = "None"
-	none_btn.tooltip_text = "Disable every visible mod"
-	none_btn.disabled = on_vanilla
-	filter_bar.add_child(none_btn)
-	_wire_hint(none_btn, "Disable every visible mod (respects the search filter).")
 
 	var hide_check := CheckBox.new()
 	hide_check.text = "Hide disabled"
@@ -834,6 +939,126 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 	hide_check.disabled = on_vanilla
 	filter_bar.add_child(hide_check)
 	_wire_hint(hide_check, "Hide rows for disabled mods.")
+
+	var list_card := PanelContainer.new()
+	list_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_card.add_theme_stylebox_override("panel", _ui_box(Color(0.023, 0.030, 0.025), Color(0.11, 0.15, 0.10), 0, 8))
+	main_col.add_child(list_card)
+
+	var list_card_pad := MarginContainer.new()
+	list_card_pad.add_theme_constant_override("margin_left", 10)
+	list_card_pad.add_theme_constant_override("margin_right", 4)
+	list_card_pad.add_theme_constant_override("margin_top", 10)
+	list_card_pad.add_theme_constant_override("margin_bottom", 10)
+	list_card.add_child(list_card_pad)
+
+	var left_scroll := ScrollContainer.new()
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_card_pad.add_child(left_scroll)
+
+	var list_pad := MarginContainer.new()
+	list_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_pad.add_theme_constant_override("margin_right", 10)
+	left_scroll.add_child(list_pad)
+
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 8)
+	list_pad.add_child(list)
+
+	var right := VBoxContainer.new()
+	right.custom_minimum_size.x = 270
+	right.add_theme_constant_override("separation", 10)
+	outer.add_child(right)
+
+	var order_panel := PanelContainer.new()
+	order_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	order_panel.add_theme_stylebox_override("panel", _ui_box(Color(0.026, 0.034, 0.028), Color(0.13, 0.18, 0.11), 0, 8))
+	right.add_child(order_panel)
+
+	var order_pad := MarginContainer.new()
+	order_pad.add_theme_constant_override("margin_left", 12)
+	order_pad.add_theme_constant_override("margin_right", 12)
+	order_pad.add_theme_constant_override("margin_top", 12)
+	order_pad.add_theme_constant_override("margin_bottom", 12)
+	order_panel.add_child(order_pad)
+
+	var order_body := VBoxContainer.new()
+	order_body.add_theme_constant_override("separation", 8)
+	order_pad.add_child(order_body)
+
+	var order_header := Label.new()
+	order_header.text = "DEPLOYMENT TIMELINE"
+	order_header.add_theme_font_size_override("font_size", 12)
+	order_header.add_theme_color_override("font_color", Color(0.84, 0.96, 0.62))
+	order_body.add_child(order_header)
+
+	var order_sub := Label.new()
+	order_sub.text = "Top loads first. Bottom wins conflicts."
+	order_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	order_sub.add_theme_font_size_override("font_size", 11)
+	order_sub.modulate = Color(0.55, 0.62, 0.50)
+	order_body.add_child(order_sub)
+
+	var order_scroll := ScrollContainer.new()
+	order_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	order_body.add_child(order_scroll)
+
+	var order_list := VBoxContainer.new()
+	order_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	order_list.add_theme_constant_override("separation", 6)
+	order_scroll.add_child(order_list)
+
+	var refresh_summary := func():
+		var count := 0
+		for e in _ui_mod_entries:
+			if bool(e.get("enabled", false)):
+				count += 1
+		enabled_value.text = str(count)
+		refresh_launch_button_label()
+
+	var refresh_order := func():
+		for child in order_list.get_children():
+			child.queue_free()
+		var sorted := _ui_mod_entries.filter(func(e): return e["enabled"])
+		sorted.sort_custom(_compare_load_order)
+		if sorted.is_empty():
+			var lbl := Label.new()
+			lbl.text = "No armed mods yet."
+			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			lbl.modulate = Color(0.50, 0.56, 0.46)
+			order_list.add_child(lbl)
+			return
+		for i in sorted.size():
+			var e: Dictionary = sorted[i]
+			var card := PanelContainer.new()
+			var is_last := i == sorted.size() - 1
+			var bg := Color(0.048, 0.066, 0.040) if is_last else Color(0.032, 0.042, 0.034)
+			var border := Color(0.34, 0.48, 0.22) if is_last else Color(0.15, 0.20, 0.13)
+			card.add_theme_stylebox_override("panel", _ui_box(bg, border, 8, 6))
+			order_list.add_child(card)
+			var v := VBoxContainer.new()
+			v.add_theme_constant_override("separation", 2)
+			card.add_child(v)
+			var number := Label.new()
+			number.text = str(i + 1).pad_zeros(2) + ("  wins conflicts" if is_last else "")
+			number.add_theme_font_size_override("font_size", 10)
+			number.modulate = Color(0.55, 0.64, 0.48)
+			v.add_child(number)
+			var name := Label.new()
+			name.text = str(e["mod_name"])
+			name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			name.add_theme_font_size_override("font_size", 12)
+			name.modulate = Color(0.85, 0.92, 0.74)
+			v.add_child(name)
+
+	dev_check.toggled.connect(func(on: bool):
+		_developer_mode = on
+		_ui_mod_entries = collect_mod_metadata()
+		_load_ui_config()
+		_rebuild_mods_tab(tabs)
+	)
 
 	filter_edit.text_changed.connect(func(t: String):
 		_mods_filter_text = t
@@ -860,91 +1085,26 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 		_rebuild_mods_tab(tabs)
 	)
 
-	var left_scroll := ScrollContainer.new()
-	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left_col.add_child(left_scroll)
-
-	var list_pad := MarginContainer.new()
-	list_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_pad.add_theme_constant_override("margin_right", 16)
-	left_scroll.add_child(list_pad)
-
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 6)
-	list_pad.add_child(list)
-
-
-	var right := VBoxContainer.new()
-	right.custom_minimum_size.x = 250
-	right.add_theme_constant_override("separation", 6)
-	split.add_child(right)
-
-	var order_header := Label.new()
-	order_header.text = "DEPLOYMENT ORDER"
-	order_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	order_header.add_theme_font_size_override("font_size", 11)
-	order_header.add_theme_color_override("font_color", Color(0.74, 0.86, 0.60))
-	right.add_child(order_header)
-	right.add_child(HSeparator.new())
-
-	var order_panel := PanelContainer.new()
-	order_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.028, 0.036, 0.030)
-	panel_style.border_color = Color(0.13, 0.18, 0.11)
-	panel_style.border_width_top = 1
-	panel_style.border_width_bottom = 1
-	panel_style.border_width_left = 1
-	panel_style.border_width_right = 1
-	panel_style.corner_radius_top_left = 6
-	panel_style.corner_radius_top_right = 6
-	panel_style.corner_radius_bottom_left = 6
-	panel_style.corner_radius_bottom_right = 6
-	panel_style.content_margin_left = 8
-	panel_style.content_margin_right = 8
-	panel_style.content_margin_top = 6
-	panel_style.content_margin_bottom = 6
-	order_panel.add_theme_stylebox_override("panel", panel_style)
-	right.add_child(order_panel)
-
-	var order_scroll := ScrollContainer.new()
-	order_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	order_panel.add_child(order_scroll)
-
-	var order_list := VBoxContainer.new()
-	order_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	order_scroll.add_child(order_list)
-
-	var refresh_order := func():
-		for child in order_list.get_children():
-			child.queue_free()
-		var sorted := _ui_mod_entries.filter(func(e): return e["enabled"])
-		sorted.sort_custom(_compare_load_order)
-		if sorted.is_empty():
-			var lbl := Label.new()
-			lbl.text = "No mods armed."
-			lbl.modulate = Color(0.50, 0.56, 0.46)
-			order_list.add_child(lbl)
-			return
-		for i in sorted.size():
-			var e: Dictionary = sorted[i]
-			var lbl := Label.new()
-			lbl.text = str(i + 1).pad_zeros(2) + "  " + e["mod_name"]
-			lbl.add_theme_font_size_override("font_size", 12)
-			lbl.modulate = Color(0.82, 0.88, 0.74)
-			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			order_list.add_child(lbl)
-
 	var missing_files := _missing_mods_in_active_profile()
 	if not missing_files.is_empty():
+		var missing_panel := PanelContainer.new()
+		missing_panel.add_theme_stylebox_override("panel", _ui_box(Color(0.090, 0.042, 0.040), Color(0.38, 0.13, 0.12), 0, 7))
+		list.add_child(missing_panel)
+		var missing_pad := MarginContainer.new()
+		missing_pad.add_theme_constant_override("margin_left", 10)
+		missing_pad.add_theme_constant_override("margin_right", 10)
+		missing_pad.add_theme_constant_override("margin_top", 8)
+		missing_pad.add_theme_constant_override("margin_bottom", 8)
+		missing_panel.add_child(missing_pad)
+		var missing_box := VBoxContainer.new()
+		missing_box.add_theme_constant_override("separation", 6)
+		missing_pad.add_child(missing_box)
 		var missing_hdr_row := HBoxContainer.new()
-		list.add_child(missing_hdr_row)
+		missing_box.add_child(missing_hdr_row)
 		var missing_hdr := Label.new()
 		missing_hdr.text = "Missing mods"
-		missing_hdr.modulate = Color(1.0, 0.55, 0.55)
-		missing_hdr.add_theme_font_size_override("font_size", 11)
+		missing_hdr.modulate = Color(1.0, 0.62, 0.58)
+		missing_hdr.add_theme_font_size_override("font_size", 12)
 		missing_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		missing_hdr_row.add_child(missing_hdr)
 		var remove_all_btn := Button.new()
@@ -956,14 +1116,13 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 			_remove_all_missing_entries_from_profile()
 			_rebuild_mods_tab(tabs)
 		)
-		list.add_child(HSeparator.new())
 		for fn: String in missing_files:
 			var miss_row := HBoxContainer.new()
-			list.add_child(miss_row)
+			missing_box.add_child(miss_row)
 			var miss_lbl := Label.new()
 			var display := fn.trim_prefix("zip:")
 			miss_lbl.text = display + "  --  not installed"
-			miss_lbl.modulate = Color(1.0, 0.45, 0.45)
+			miss_lbl.modulate = Color(1.0, 0.62, 0.58)
 			miss_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			miss_row.add_child(miss_lbl)
 			var remove_btn := Button.new()
@@ -975,45 +1134,18 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 				_remove_missing_entry_from_profile(captured)
 				_rebuild_mods_tab(tabs)
 			)
-			list.add_child(HSeparator.new())
-
-
-	var header_row := HBoxContainer.new()
-	list.add_child(header_row)
-
-	var h_on := Label.new()
-	h_on.text = "ARM"
-	h_on.custom_minimum_size.x = 30
-	h_on.add_theme_font_size_override("font_size", 10)
-	h_on.modulate = Color(0.58, 0.64, 0.52)
-	header_row.add_child(h_on)
-
-	var h_name := Label.new()
-	h_name.text = "MOD PACKAGE"
-	h_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h_name.add_theme_font_size_override("font_size", 10)
-	h_name.modulate = Color(0.58, 0.64, 0.52)
-	header_row.add_child(h_name)
-
-	var h_prio := Label.new()
-	h_prio.text = "ORDER"
-	h_prio.custom_minimum_size.x = 100
-	h_prio.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	h_prio.add_theme_font_size_override("font_size", 10)
-	h_prio.modulate = Color(0.58, 0.64, 0.52)
-	header_row.add_child(h_prio)
-
-	list.add_child(HSeparator.new())
-
 
 	if _ui_mod_entries.is_empty():
+		var empty_panel := PanelContainer.new()
+		empty_panel.add_theme_stylebox_override("panel", _ui_box(Color(0.032, 0.040, 0.034), Color(0.14, 0.19, 0.12), 14, 8))
+		list.add_child(empty_panel)
 		var empty := Label.new()
 		empty.text = "No mods found.\n\nPlace .vmz or .pck files in:\n" \
 				+ ProjectSettings.globalize_path(_mods_dir)
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty.modulate = Color(0.5, 0.5, 0.5)
-		empty.add_theme_font_size_override("font_size", 12)
-		list.add_child(empty)
+		empty.modulate = Color(0.56, 0.62, 0.52)
+		empty.add_theme_font_size_override("font_size", 13)
+		empty_panel.add_child(empty)
 
 	var rendered_any := false
 	for entry in _ui_mod_entries:
@@ -1022,38 +1154,49 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 		rendered_any = true
 		var row_panel := PanelContainer.new()
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var row_bg := Color(0.045, 0.060, 0.043) if entry["enabled"] else Color(0.028, 0.034, 0.030)
-		var row_border := Color(0.24, 0.34, 0.16) if entry["enabled"] else Color(0.10, 0.13, 0.10)
-		row_panel.add_theme_stylebox_override("panel", _ui_box(row_bg, row_border, 0, 6))
+		var row_bg := Color(0.043, 0.060, 0.038) if entry["enabled"] else Color(0.029, 0.036, 0.031)
+		var row_border := Color(0.25, 0.38, 0.16) if entry["enabled"] else Color(0.11, 0.15, 0.10)
+		row_panel.add_theme_stylebox_override("panel", _ui_box(row_bg, row_border, 0, 8))
 		list.add_child(row_panel)
 
 		var row_pad := MarginContainer.new()
-		row_pad.add_theme_constant_override("margin_left", 8)
-		row_pad.add_theme_constant_override("margin_right", 8)
-		row_pad.add_theme_constant_override("margin_top", 7)
-		row_pad.add_theme_constant_override("margin_bottom", 7)
+		row_pad.add_theme_constant_override("margin_left", 10)
+		row_pad.add_theme_constant_override("margin_right", 10)
+		row_pad.add_theme_constant_override("margin_top", 9)
+		row_pad.add_theme_constant_override("margin_bottom", 9)
 		row_panel.add_child(row_pad)
 
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
+		row.add_theme_constant_override("separation", 10)
 		row_pad.add_child(row)
 
 		var check := CheckBox.new()
 		check.button_pressed = entry["enabled"]
-		check.custom_minimum_size.x = 34
+		check.custom_minimum_size.x = 38
 		row.add_child(check)
 
 		var name_col := VBoxContainer.new()
 		name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_col.add_theme_constant_override("separation", 2)
+		name_col.add_theme_constant_override("separation", 3)
 		row.add_child(name_col)
+
+		var top_line := HBoxContainer.new()
+		top_line.add_theme_constant_override("separation", 8)
+		name_col.add_child(top_line)
 
 		var name_lbl := Label.new()
 		name_lbl.text = entry["mod_name"]
 		name_lbl.clip_text = true
-		name_lbl.add_theme_font_size_override("font_size", 13)
-		name_lbl.modulate = Color(0.82, 0.94, 0.62) if entry["enabled"] else Color(0.55, 0.60, 0.50)
-		name_col.add_child(name_lbl)
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 14)
+		name_lbl.modulate = Color(0.86, 0.97, 0.66) if entry["enabled"] else Color(0.58, 0.64, 0.52)
+		top_line.add_child(name_lbl)
+
+		var kind_lbl := Label.new()
+		kind_lbl.text = str(entry.get("ext", "")).to_upper()
+		kind_lbl.add_theme_font_size_override("font_size", 10)
+		kind_lbl.modulate = Color(0.56, 0.64, 0.50)
+		top_line.add_child(kind_lbl)
 
 		var meta_parts := PackedStringArray()
 		var version := str(entry.get("version", ""))
@@ -1064,10 +1207,10 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 			meta_parts.append(author)
 		meta_parts.append(str(entry.get("file_name", "")))
 		var meta_lbl := Label.new()
-		meta_lbl.text = "  |  ".join(meta_parts)
+		meta_lbl.text = " / ".join(meta_parts)
 		meta_lbl.clip_text = true
 		meta_lbl.add_theme_font_size_override("font_size", 10)
-		meta_lbl.modulate = Color(0.48, 0.54, 0.44)
+		meta_lbl.modulate = Color(0.50, 0.57, 0.47)
 		name_col.add_child(meta_lbl)
 
 		if entry["ext"] == "folder":
@@ -1124,7 +1267,7 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 		spin.min_value = PRIORITY_MIN
 		spin.max_value = PRIORITY_MAX
 		spin.value = entry["priority"]
-		spin.custom_minimum_size.x = 108
+		spin.custom_minimum_size.x = 112
 		if on_vanilla:
 			spin.editable = false
 		row.add_child(spin)
@@ -1134,12 +1277,12 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 		var rpanel := row_panel
 		check.toggled.connect(func(on: bool):
 			e["enabled"] = on
-			nlbl.modulate = Color(0.82, 0.94, 0.62) if on else Color(0.55, 0.60, 0.50)
-			var toggled_bg := Color(0.045, 0.060, 0.043) if on else Color(0.028, 0.034, 0.030)
-			var toggled_border := Color(0.24, 0.34, 0.16) if on else Color(0.10, 0.13, 0.10)
-			rpanel.add_theme_stylebox_override("panel", _ui_box(toggled_bg, toggled_border, 0, 6))
+			nlbl.modulate = Color(0.86, 0.97, 0.66) if on else Color(0.58, 0.64, 0.52)
+			var toggled_bg := Color(0.043, 0.060, 0.038) if on else Color(0.029, 0.036, 0.031)
+			var toggled_border := Color(0.25, 0.38, 0.16) if on else Color(0.11, 0.15, 0.10)
+			rpanel.add_theme_stylebox_override("panel", _ui_box(toggled_bg, toggled_border, 0, 8))
 			refresh_order.call()
-			refresh_launch_button_label()
+			refresh_summary.call()
 			_save_ui_config()
 		)
 		spin.value_changed.connect(func(val: float):
@@ -1149,15 +1292,19 @@ func build_mods_tab(tabs: TabContainer) -> Control:
 		)
 
 	if not _ui_mod_entries.is_empty() and not rendered_any:
+		var no_match_panel := PanelContainer.new()
+		no_match_panel.add_theme_stylebox_override("panel", _ui_box(Color(0.032, 0.040, 0.034), Color(0.14, 0.19, 0.12), 14, 8))
+		list.add_child(no_match_panel)
 		var no_match := Label.new()
 		no_match.text = "No mods match the current filter."
-		no_match.modulate = Color(0.5, 0.5, 0.5)
-		no_match.add_theme_font_size_override("font_size", 12)
-		list.add_child(no_match)
+		no_match.modulate = Color(0.56, 0.62, 0.52)
+		no_match.add_theme_font_size_override("font_size", 13)
+		no_match_panel.add_child(no_match)
 
 	if _mods_filter_focus_pending:
 		_mods_filter_focus_pending = false
 		filter_edit.call_deferred("grab_focus")
 
 	refresh_order.call()
+	refresh_summary.call()
 	return outer
