@@ -136,6 +136,109 @@ func loaded_mods() -> Array[String]:
 		out.append(String(k))
 	return out
 
+func get_loaded_mods() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for k in _loaded_mod_ids.keys():
+		var info = _loaded_mod_ids[k]
+		if info is Dictionary:
+			out.append((info as Dictionary).duplicate())
+	return out
+
+func get_resource_owner(res_path: String) -> Dictionary:
+	var normalized := _normalize_resource_query_path(res_path)
+	if not _override_registry.has(normalized):
+		return {}
+	var claims: Array = _override_registry[normalized]
+	if claims.is_empty():
+		return {}
+	return (claims[claims.size() - 1] as Dictionary).duplicate()
+
+func on_battle_start(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_caller])
+	return _register_game_event("res://battle/battle.gd", "_ready", "post", cb, priority)
+
+func on_battle_end(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		var battle = _caller
+		_call_public_callback(callback, [
+			battle.get("health") if battle != null else null,
+			battle.get("total_enemies_spawned") if battle != null else null,
+			battle.get("total_enemies_killed") if battle != null else null,
+			battle,
+		])
+	return _register_game_event("res://battle/battle.gd", "_end_battle", "post", cb, priority)
+
+func on_enemy_spawned(callback: Callable, priority: int = 100) -> int:
+	var cb := func(count: int):
+		_call_public_callback(callback, [count, _caller])
+	return _register_game_event("res://battle/battle.gd", "_on_enemies_spawned", "post", cb, priority)
+
+func on_enemy_killed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(count: int, data: PackedByteArray):
+		_call_public_callback(callback, [count, data, _caller])
+	return _register_game_event("res://battle/battle.gd", "_on_enemies_killed", "post", cb, priority)
+
+func on_tower_placed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(tower):
+		_call_public_callback(callback, [tower, _caller])
+	return _register_game_event("res://battle/battle.gd", "add_tower", "post", cb, priority)
+
+func on_tower_removed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(tower):
+		_call_public_callback(callback, [tower, _caller])
+	return _register_game_event("res://battle/battle.gd", "remove_tower", "post", cb, priority)
+
+func on_level_loaded(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_current_selected_level(), _caller])
+	return _register_game_event("res://battle/battle.gd", "_ready", "post", cb, priority)
+
+func on_tech_tree_opened(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_caller])
+	return _register_game_event("res://menu/menu.gd", "_on_tech_tree_pressed", "post", cb, priority)
+
+func on_upgrade_purchased(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		var upgrade = _caller
+		_call_public_callback(callback, [
+			upgrade,
+			upgrade.get("level") if upgrade != null else null,
+		])
+	return _register_game_event("res://tech_tree/upgrades/upgrade.gd", "buy", "post", cb, priority)
+
+func _register_game_event(script_path: String, method_name: String, phase: String,
+		callback: Callable, priority: int) -> int:
+	var res_path := _canonical_hook_script_path(script_path)
+	if not _hooked_methods.has(res_path):
+		_hooked_methods[res_path] = {}
+	(_hooked_methods[res_path] as Dictionary)[method_name.to_lower()] = true
+	var stem := res_path.get_file().get_basename().to_lower()
+	return hook("%s-%s-%s" % [stem, method_name.to_lower(), phase], callback, priority)
+
+func _call_public_callback(callback: Callable, args: Array) -> Variant:
+	if not callback.is_valid():
+		return null
+	var argc := callback.get_argument_count()
+	if argc < 0 or argc >= args.size():
+		return callback.callv(args)
+	return callback.callv(args.slice(0, argc))
+
+func _current_selected_level() -> Variant:
+	var gm := get_node_or_null("/root/GameManager")
+	if gm == null:
+		return null
+	return gm.get("selected_level")
+
+func _normalize_resource_query_path(res_path: String) -> String:
+	var p := res_path.replace("\\", "/")
+	if p.begins_with("res://"):
+		return p
+	if p.begins_with("/"):
+		return "res:/" + p
+	return "res://" + p
+
 
 func _compare_versions(a: String, b: String) -> int:
 	var pa: PackedStringArray = a.split(".")

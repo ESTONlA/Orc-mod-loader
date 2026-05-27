@@ -2,7 +2,7 @@
 extends Node
 
 
-const MODLOADER_VERSION := "1.0.0"
+const MODLOADER_VERSION := "1.1.0"
 
 const MODLOADER_RES_PATH := "res://OrcLoader.gd"
 const MOD_DIR := "mods"
@@ -102,6 +102,7 @@ var _re_func: RegEx
 var _re_preload: RegEx
 var _re_filename_priority: RegEx
 var _re_hook_call: RegEx
+var _re_public_hook_call: RegEx
 
 var _rtv_re_extends: RegEx
 var _rtv_re_class_name: RegEx
@@ -433,6 +434,41 @@ static func _static_force_vanilla_state(reason: String, log_lines: PackedStringA
 	_static_wipe_hook_cache()
 	log_lines.append("[FileScope] RESET (" + reason + "): wiped hook pack")
 
+static func _static_read_loose_loader_version() -> String:
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	var path := exe_dir.path_join("OrcLoader.gd")
+	if not FileAccess.file_exists(path):
+		return ""
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var text := f.get_as_text()
+	f.close()
+	var marker := 'const MODLOADER_VERSION := "'
+	var start := text.find(marker)
+	if start < 0:
+		return ""
+	start += marker.length()
+	var end := text.find('"', start)
+	if end <= start:
+		return ""
+	return text.substr(start, end - start)
+
+static func _static_compare_versions(a: String, b: String) -> int:
+	var pa := a.lstrip("vV").split(".")
+	var pb := b.lstrip("vV").split(".")
+	var n: int = max(pa.size(), pb.size())
+	for i in n:
+		var sa := pa[i] if i < pa.size() else "0"
+		var sb := pb[i] if i < pb.size() else "0"
+		var va := int(sa) if sa.is_valid_int() else 0
+		var vb := int(sb) if sb.is_valid_int() else 0
+		if va < vb:
+			return -1
+		if va > vb:
+			return 1
+	return 0
+
 static func _mount_previous_session() -> Dictionary:
 	var mounted: Dictionary = {}
 	var log_lines: PackedStringArray = []
@@ -447,6 +483,17 @@ static func _mount_previous_session() -> Dictionary:
 		_static_force_vanilla_state("pass 2 crashed mid-run", log_lines)
 		_write_filescope_log(log_lines)
 		return mounted
+
+	var loose_loader_version := _static_read_loose_loader_version()
+	if loose_loader_version != "" and loose_loader_version != MODLOADER_VERSION:
+		if _static_compare_versions(loose_loader_version, MODLOADER_VERSION) > 0:
+			_static_force_vanilla_state("loose OrcLoader.gd is newer than running loader", log_lines)
+			log_lines.append("[FileScope] WARNING: loose OrcLoader.gd is v%s but the running embedded loader is v%s. Cached hook packs were wiped, but the embedded loader must be updated/repacked before the new code can run." \
+					% [loose_loader_version, MODLOADER_VERSION])
+			_write_filescope_log(log_lines)
+			return mounted
+		log_lines.append("[FileScope] Note: loose OrcLoader.gd is v%s while running loader is v%s" \
+				% [loose_loader_version, MODLOADER_VERSION])
 
 
 	var cfg := ConfigFile.new()
@@ -1340,6 +1387,7 @@ func collect_mod_metadata() -> Array[Dictionary]:
 		for sf in skipped_files:
 			_log_debug("  " + sf + "  (not .vmz/.pck)")
 	entries = _dedupe_by_mod_id(entries)
+	_resolve_entry_dependencies(entries)
 	if entries.size() == 0:
 		_log_warning("No mods found in: " + _mods_dir)
 	else:
@@ -1401,6 +1449,8 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 	var author   := ""
 	var priority := 0
 	var has_mod_id := false
+	var required_dependencies: Array[Dictionary] = []
+	var optional_dependencies: Array[Dictionary] = []
 
 	var base_name := file_name.get_basename()
 	var filename_priority := 0
@@ -1425,6 +1475,9 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 			priority = int(str(cfg.get_value("mod", "priority")))
 		elif has_filename_priority:
 			priority = filename_priority
+		if cfg.has_section("dependencies"):
+			required_dependencies = _parse_dependency_specs(cfg.get_value("dependencies", "required", ""))
+			optional_dependencies = _parse_dependency_specs(cfg.get_value("dependencies", "optional", ""))
 	elif has_filename_priority:
 		priority = filename_priority
 	priority = clampi(priority, PRIORITY_MIN, PRIORITY_MAX)
@@ -1439,27 +1492,123 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 		"priority": priority, "enabled": true,
 		"cfg": cfg, "mod_txt_status": _last_mod_txt_status,
 		"mod_txt_error": _last_mod_txt_error,
+		"dependencies_required": required_dependencies,
+		"dependencies_optional": optional_dependencies,
+		"dependency_errors": [],
+		"dependency_warnings": [],
+		"dependency_blocked": false,
 	}
 	return entry
 
 func _build_entry_warnings(entry: Dictionary) -> Array[String]:
 	var warnings: Array[String] = []
 	var ext: String = entry["ext"]
-	if ext == "pck" or ext == "folder":
-		return warnings
-	var status: String = entry.get("mod_txt_status", "none")
-	if status == "none":
-		warnings.append("Invalid mod -- may not work correctly. Reinstall the mod.")
-	elif status == "parse_error":
-		var detail: String = entry.get("mod_txt_error", "")
-		if detail.is_empty():
-			warnings.append("Invalid mod -- mod.txt failed to parse. Reinstall the mod.")
-		else:
-			warnings.append("mod.txt parse error at " + detail)
-	elif status.begins_with("nested:"):
-		warnings.append("Invalid mod -- packaged incorrectly. Reinstall the mod.")
+	if ext != "pck" and ext != "folder":
+		var status: String = entry.get("mod_txt_status", "none")
+		if status == "none":
+			warnings.append("Invalid mod -- may not work correctly. Reinstall the mod.")
+		elif status == "parse_error":
+			var detail: String = entry.get("mod_txt_error", "")
+			if detail.is_empty():
+				warnings.append("Invalid mod -- mod.txt failed to parse. Reinstall the mod.")
+			else:
+				warnings.append("mod.txt parse error at " + detail)
+		elif status.begins_with("nested:"):
+			warnings.append("Invalid mod -- packaged incorrectly. Reinstall the mod.")
+	for dep_warn: String in entry.get("dependency_warnings", []):
+		warnings.append(dep_warn)
+	for dep_err: String in entry.get("dependency_errors", []):
+		warnings.append(dep_err)
 	return warnings
 
+
+func _parse_dependency_specs(value: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for raw_spec: String in _dependency_value_strings(value):
+		var spec := raw_spec.strip_edges()
+		if spec == "":
+			continue
+		var dep := _parse_dependency_spec(spec)
+		if not String(dep.get("id", "")).is_empty():
+			out.append(dep)
+	return out
+
+func _dependency_value_strings(value: Variant) -> Array[String]:
+	var out: Array[String] = []
+	if value is Array:
+		for item in value:
+			out.append_array(_dependency_value_strings(item))
+	elif value is PackedStringArray:
+		for item in value:
+			out.append(str(item))
+	else:
+		var text := str(value).replace("\r", "\n")
+		for chunk in text.split("\n", false):
+			for part in chunk.split(",", false):
+				var s := str(part).strip_edges()
+				if s != "":
+					out.append(s)
+	return out
+
+func _parse_dependency_spec(spec: String) -> Dictionary:
+	for op in [">=", "<=", "==", ">", "<", "="]:
+		var idx := spec.find(op)
+		if idx > 0:
+			return {
+				"id": spec.substr(0, idx).strip_edges(),
+				"op": "==" if op == "=" else op,
+				"version": spec.substr(idx + op.length()).strip_edges(),
+				"raw": spec,
+			}
+	return {"id": spec.strip_edges(), "op": "", "version": "", "raw": spec}
+
+func _resolve_entry_dependencies(entries: Array[Dictionary]) -> void:
+	var by_id: Dictionary = {}
+	for entry: Dictionary in entries:
+		by_id[str(entry.get("mod_id", "")).to_lower()] = entry
+	for entry: Dictionary in entries:
+		var errors: Array[String] = []
+		var warnings: Array[String] = []
+		for dep: Dictionary in entry.get("dependencies_required", []):
+			var issue := _dependency_issue(dep, by_id)
+			if issue != "":
+				errors.append(issue)
+		for dep: Dictionary in entry.get("dependencies_optional", []):
+			if not by_id.has(str(dep.get("id", "")).to_lower()):
+				warnings.append("Optional dependency not found: " + str(dep.get("raw", dep.get("id", ""))))
+		entry["dependency_errors"] = errors
+		entry["dependency_warnings"] = warnings
+		entry["dependency_blocked"] = errors.size() > 0
+		var combined: Array[String] = _build_entry_warnings(entry)
+		entry["warnings"] = combined
+
+func _dependency_issue(dep: Dictionary, by_id: Dictionary) -> String:
+	var dep_id := str(dep.get("id", "")).to_lower()
+	var raw := str(dep.get("raw", dep_id))
+	if not by_id.has(dep_id):
+		return "Missing required dependency: " + raw
+	var op := str(dep.get("op", ""))
+	var version := str(dep.get("version", ""))
+	if op == "":
+		return ""
+	var entry: Dictionary = by_id[dep_id]
+	var have := str(entry.get("version", ""))
+	var cmp := compare_versions(have, version)
+	var ok := false
+	match op:
+		">=":
+			ok = cmp >= 0
+		"<=":
+			ok = cmp <= 0
+		">":
+			ok = cmp > 0
+		"<":
+			ok = cmp < 0
+		"==":
+			ok = cmp == 0
+	if ok:
+		return ""
+	return "Required dependency version not met: %s (found %s)" % [raw, have if have != "" else "unversioned"]
 
 
 func _compare_load_order(a: Dictionary, b: Dictionary) -> bool:
@@ -1562,6 +1711,10 @@ func load_all_mods(pass_label: String = "") -> void:
 	for entry in _ui_mod_entries:
 		if not entry["enabled"]:
 			continue
+		if bool(entry.get("dependency_blocked", false)):
+			_log_warning("Skipping " + str(entry.get("mod_name", entry.get("file_name", "")))
+					+ " -- required dependencies are missing or incompatible.")
+			continue
 		candidates.append(entry.duplicate())
 	candidates.sort_custom(_compare_load_order)
 
@@ -1614,6 +1767,39 @@ func _merge_hook_calls_into_wrap_mask() -> void:
 			if not _hooked_methods.has(path):
 				_hooked_methods[path] = {}
 			(_hooked_methods[path] as Dictionary)[method.to_lower()] = true
+
+func _static_public_hook_targets(helper_name: String) -> Array[Dictionary]:
+	match helper_name:
+		"on_battle_start":
+			return [{"prefix": "battle", "method": "_ready"}]
+		"on_battle_end":
+			return [{"prefix": "battle", "method": "_end_battle"}]
+		"on_enemy_spawned":
+			return [{"prefix": "battle", "method": "_on_enemies_spawned"}]
+		"on_enemy_killed":
+			return [{"prefix": "battle", "method": "_on_enemies_killed"}]
+		"on_tower_placed":
+			return [{"prefix": "battle", "method": "add_tower"}]
+		"on_tower_removed":
+			return [{"prefix": "battle", "method": "remove_tower"}]
+		"on_level_loaded":
+			return [{"prefix": "battle", "method": "_ready"}]
+		"on_tech_tree_opened":
+			return [{"prefix": "menu", "method": "_on_tech_tree_pressed"}]
+		"on_upgrade_purchased":
+			return [{"prefix": "upgrade", "method": "buy"}]
+	return []
+
+func _record_static_hook_call(analysis: Dictionary, prefix: String, method: String) -> void:
+	var normalized_prefix := prefix.to_lower()
+	var normalized_method := method.to_lower()
+	for existing: Dictionary in (analysis["hook_calls"] as Array):
+		if existing["prefix"] == normalized_prefix and existing["method"] == normalized_method:
+			return
+	(analysis["hook_calls"] as Array).append({
+		"prefix": normalized_prefix,
+		"method": normalized_method,
+	})
 
 func _process_mod_candidate(c: Dictionary, load_index: int) -> void:
 	var file_name: String = c["file_name"]
@@ -1932,13 +2118,12 @@ func _scan_gd_source(text: String, analysis: Dictionary) -> void:
 	for m_hk in _re_hook_call.search_all(text):
 		var prefix := m_hk.get_string(1).to_lower()
 		var method := m_hk.get_string(2)
-		var already: bool = false
-		for existing: Dictionary in (analysis["hook_calls"] as Array):
-			if existing["prefix"] == prefix and existing["method"] == method:
-				already = true
-				break
-		if not already:
-			(analysis["hook_calls"] as Array).append({"prefix": prefix, "method": method})
+		_record_static_hook_call(analysis, prefix, method)
+
+	for m_pub in _re_public_hook_call.search_all(text):
+		var helper_name := m_pub.get_string(1)
+		for target: Dictionary in _static_public_hook_targets(helper_name):
+			_record_static_hook_call(analysis, target["prefix"], target["method"])
 
 	var func_matches := _re_func.search_all(text)
 
@@ -3571,6 +3756,109 @@ func loaded_mods() -> Array[String]:
 		out.append(String(k))
 	return out
 
+func get_loaded_mods() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for k in _loaded_mod_ids.keys():
+		var info = _loaded_mod_ids[k]
+		if info is Dictionary:
+			out.append((info as Dictionary).duplicate())
+	return out
+
+func get_resource_owner(res_path: String) -> Dictionary:
+	var normalized := _normalize_resource_query_path(res_path)
+	if not _override_registry.has(normalized):
+		return {}
+	var claims: Array = _override_registry[normalized]
+	if claims.is_empty():
+		return {}
+	return (claims[claims.size() - 1] as Dictionary).duplicate()
+
+func on_battle_start(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_caller])
+	return _register_game_event("res://battle/battle.gd", "_ready", "post", cb, priority)
+
+func on_battle_end(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		var battle = _caller
+		_call_public_callback(callback, [
+			battle.get("health") if battle != null else null,
+			battle.get("total_enemies_spawned") if battle != null else null,
+			battle.get("total_enemies_killed") if battle != null else null,
+			battle,
+		])
+	return _register_game_event("res://battle/battle.gd", "_end_battle", "post", cb, priority)
+
+func on_enemy_spawned(callback: Callable, priority: int = 100) -> int:
+	var cb := func(count: int):
+		_call_public_callback(callback, [count, _caller])
+	return _register_game_event("res://battle/battle.gd", "_on_enemies_spawned", "post", cb, priority)
+
+func on_enemy_killed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(count: int, data: PackedByteArray):
+		_call_public_callback(callback, [count, data, _caller])
+	return _register_game_event("res://battle/battle.gd", "_on_enemies_killed", "post", cb, priority)
+
+func on_tower_placed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(tower):
+		_call_public_callback(callback, [tower, _caller])
+	return _register_game_event("res://battle/battle.gd", "add_tower", "post", cb, priority)
+
+func on_tower_removed(callback: Callable, priority: int = 100) -> int:
+	var cb := func(tower):
+		_call_public_callback(callback, [tower, _caller])
+	return _register_game_event("res://battle/battle.gd", "remove_tower", "post", cb, priority)
+
+func on_level_loaded(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_current_selected_level(), _caller])
+	return _register_game_event("res://battle/battle.gd", "_ready", "post", cb, priority)
+
+func on_tech_tree_opened(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		_call_public_callback(callback, [_caller])
+	return _register_game_event("res://menu/menu.gd", "_on_tech_tree_pressed", "post", cb, priority)
+
+func on_upgrade_purchased(callback: Callable, priority: int = 100) -> int:
+	var cb := func():
+		var upgrade = _caller
+		_call_public_callback(callback, [
+			upgrade,
+			upgrade.get("level") if upgrade != null else null,
+		])
+	return _register_game_event("res://tech_tree/upgrades/upgrade.gd", "buy", "post", cb, priority)
+
+func _register_game_event(script_path: String, method_name: String, phase: String,
+		callback: Callable, priority: int) -> int:
+	var res_path := _canonical_hook_script_path(script_path)
+	if not _hooked_methods.has(res_path):
+		_hooked_methods[res_path] = {}
+	(_hooked_methods[res_path] as Dictionary)[method_name.to_lower()] = true
+	var stem := res_path.get_file().get_basename().to_lower()
+	return hook("%s-%s-%s" % [stem, method_name.to_lower(), phase], callback, priority)
+
+func _call_public_callback(callback: Callable, args: Array) -> Variant:
+	if not callback.is_valid():
+		return null
+	var argc := callback.get_argument_count()
+	if argc < 0 or argc >= args.size():
+		return callback.callv(args)
+	return callback.callv(args.slice(0, argc))
+
+func _current_selected_level() -> Variant:
+	var gm := get_node_or_null("/root/GameManager")
+	if gm == null:
+		return null
+	return gm.get("selected_level")
+
+func _normalize_resource_query_path(res_path: String) -> String:
+	var p := res_path.replace("\\", "/")
+	if p.begins_with("res://"):
+		return p
+	if p.begins_with("/"):
+		return "res:/" + p
+	return "res://" + p
+
 
 func _compare_versions(a: String, b: String) -> int:
 	var pa: PackedStringArray = a.split(".")
@@ -3647,6 +3935,10 @@ const Registry := {
 	SCENES = "scenes",
 	SCRIPTS = "scripts",
 	SCENE_NODES = "scene_nodes",
+	TOWERS = "towers",
+	UPGRADES = "upgrades",
+	LEVELS = "levels",
+	ABILITIES = "abilities",
 }
 
 var _registry_registered: Dictionary = {}
@@ -3903,6 +4195,26 @@ func find(registry: String, predicate: Callable, include_vanilla: bool = true) -
 		if entry != null and bool(predicate.call(entry)):
 			out.append({"id": String(id), "entry": entry})
 	return out
+
+func register_tower(id: String, data: Variant) -> bool: return register(Registry.TOWERS, id, data)
+func override_tower(id: String, data: Variant) -> bool: return override(Registry.TOWERS, id, data)
+func get_tower(id: String) -> Variant: return get_entry(Registry.TOWERS, id)
+func list_towers() -> Dictionary: return list(Registry.TOWERS)
+
+func register_upgrade(id: String, data: Variant) -> bool: return register(Registry.UPGRADES, id, data)
+func override_upgrade(id: String, data: Variant) -> bool: return override(Registry.UPGRADES, id, data)
+func get_upgrade(id: String) -> Variant: return get_entry(Registry.UPGRADES, id)
+func list_upgrades() -> Dictionary: return list(Registry.UPGRADES)
+
+func register_level(id: String, data: Variant) -> bool: return register(Registry.LEVELS, id, data)
+func override_level(id: String, data: Variant) -> bool: return override(Registry.LEVELS, id, data)
+func get_level(id: String) -> Variant: return get_entry(Registry.LEVELS, id)
+func list_levels() -> Dictionary: return list(Registry.LEVELS)
+
+func register_ability(id: String, data: Variant) -> bool: return register(Registry.ABILITIES, id, data)
+func override_ability(id: String, data: Variant) -> bool: return override(Registry.ABILITIES, id, data)
+func get_ability(id: String) -> Variant: return get_entry(Registry.ABILITIES, id)
+func list_abilities() -> Dictionary: return list(Registry.ABILITIES)
 
 
 func _generic_bundle_result(entries: Dictionary, label: String) -> Dictionary:
@@ -4763,6 +5075,8 @@ func _compile_regex() -> void:
 	_re_filename_priority.compile('^(-?\\d+)-(.*)')
 	_re_hook_call = RegEx.new()
 	_re_hook_call.compile('\\.hook\\s*\\(\\s*"([A-Za-z_][\\w]*)-([A-Za-z_][\\w]*?)(?:-(?:pre|post|callback))?"')
+	_re_public_hook_call = RegEx.new()
+	_re_public_hook_call.compile('\\.(on_battle_start|on_battle_end|on_enemy_spawned|on_enemy_killed|on_tower_placed|on_tower_removed|on_level_loaded|on_tech_tree_opened|on_upgrade_purchased)\\s*\\(')
 
 
 
@@ -6032,6 +6346,11 @@ func _run_pass_1() -> void:
 
 	var sections := _build_autoload_sections()
 	var archive_paths := _collect_enabled_archive_paths()
+	if _filescope_mounts_differ_from(archive_paths):
+		_log_info("[OrcKit] Enabled mod set changed since static mount -- cleaning stale mounted mods and restarting")
+		_reset_cached_mod_state_for_restart()
+		_modloader_restart(true)
+		return
 
 	var new_hash := _compute_state_hash(archive_paths, sections.prepend)
 	var old_hash := ""
@@ -6070,6 +6389,33 @@ func _run_pass_1() -> void:
 		_static_wipe_hook_cache()
 		_log_info("[Hooks] Cleaned up unused hook artifacts")
 	await _finish_single_pass()
+
+func _filescope_mounts_differ_from(archive_paths: PackedStringArray) -> bool:
+	if _filescope_mounted.is_empty():
+		return false
+	var mounted: Array[String] = []
+	for p in _filescope_mounted.keys():
+		mounted.append(String(p))
+	var desired: Array[String] = []
+	for p in archive_paths:
+		desired.append(String(p))
+	mounted.sort()
+	desired.sort()
+	if mounted.size() != desired.size():
+		return true
+	for i in mounted.size():
+		if mounted[i] != desired[i]:
+			return true
+	return false
+
+func _reset_cached_mod_state_for_restart() -> void:
+	if FileAccess.file_exists(PASS_STATE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(PASS_STATE_PATH))
+	if FileAccess.file_exists(PASS2_DIRTY_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(PASS2_DIRTY_PATH))
+	_restore_clean_override_cfg()
+	_static_wipe_hook_cache()
+	_delete_heartbeat()
 
 func _finish_with_existing_mounts() -> void:
 	_boot_complete = true

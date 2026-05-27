@@ -1,5 +1,5 @@
 
-const MODLOADER_VERSION := "1.0.0"
+const MODLOADER_VERSION := "1.1.0"
 
 const MODLOADER_RES_PATH := "res://OrcLoader.gd"
 const MOD_DIR := "mods"
@@ -99,6 +99,7 @@ var _re_func: RegEx
 var _re_preload: RegEx
 var _re_filename_priority: RegEx
 var _re_hook_call: RegEx
+var _re_public_hook_call: RegEx
 
 var _rtv_re_extends: RegEx
 var _rtv_re_class_name: RegEx

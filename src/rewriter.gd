@@ -16,6 +16,8 @@ func _compile_regex() -> void:
 	_re_filename_priority.compile('^(-?\\d+)-(.*)')
 	_re_hook_call = RegEx.new()
 	_re_hook_call.compile('\\.hook\\s*\\(\\s*"([A-Za-z_][\\w]*)-([A-Za-z_][\\w]*?)(?:-(?:pre|post|callback))?"')
+	_re_public_hook_call = RegEx.new()
+	_re_public_hook_call.compile('\\.(on_battle_start|on_battle_end|on_enemy_spawned|on_enemy_killed|on_tower_placed|on_tower_removed|on_level_loaded|on_tech_tree_opened|on_upgrade_purchased)\\s*\\(')
 
 
 

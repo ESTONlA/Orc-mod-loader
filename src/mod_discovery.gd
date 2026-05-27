@@ -42,6 +42,7 @@ func collect_mod_metadata() -> Array[Dictionary]:
 		for sf in skipped_files:
 			_log_debug("  " + sf + "  (not .vmz/.pck)")
 	entries = _dedupe_by_mod_id(entries)
+	_resolve_entry_dependencies(entries)
 	if entries.size() == 0:
 		_log_warning("No mods found in: " + _mods_dir)
 	else:
@@ -103,6 +104,8 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 	var author   := ""
 	var priority := 0
 	var has_mod_id := false
+	var required_dependencies: Array[Dictionary] = []
+	var optional_dependencies: Array[Dictionary] = []
 
 	var base_name := file_name.get_basename()
 	var filename_priority := 0
@@ -127,6 +130,9 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 			priority = int(str(cfg.get_value("mod", "priority")))
 		elif has_filename_priority:
 			priority = filename_priority
+		if cfg.has_section("dependencies"):
+			required_dependencies = _parse_dependency_specs(cfg.get_value("dependencies", "required", ""))
+			optional_dependencies = _parse_dependency_specs(cfg.get_value("dependencies", "optional", ""))
 	elif has_filename_priority:
 		priority = filename_priority
 	priority = clampi(priority, PRIORITY_MIN, PRIORITY_MAX)
@@ -141,27 +147,123 @@ func _entry_from_config(cfg: ConfigFile, file_name: String, full_path: String, e
 		"priority": priority, "enabled": true,
 		"cfg": cfg, "mod_txt_status": _last_mod_txt_status,
 		"mod_txt_error": _last_mod_txt_error,
+		"dependencies_required": required_dependencies,
+		"dependencies_optional": optional_dependencies,
+		"dependency_errors": [],
+		"dependency_warnings": [],
+		"dependency_blocked": false,
 	}
 	return entry
 
 func _build_entry_warnings(entry: Dictionary) -> Array[String]:
 	var warnings: Array[String] = []
 	var ext: String = entry["ext"]
-	if ext == "pck" or ext == "folder":
-		return warnings
-	var status: String = entry.get("mod_txt_status", "none")
-	if status == "none":
-		warnings.append("Invalid mod -- may not work correctly. Reinstall the mod.")
-	elif status == "parse_error":
-		var detail: String = entry.get("mod_txt_error", "")
-		if detail.is_empty():
-			warnings.append("Invalid mod -- mod.txt failed to parse. Reinstall the mod.")
-		else:
-			warnings.append("mod.txt parse error at " + detail)
-	elif status.begins_with("nested:"):
-		warnings.append("Invalid mod -- packaged incorrectly. Reinstall the mod.")
+	if ext != "pck" and ext != "folder":
+		var status: String = entry.get("mod_txt_status", "none")
+		if status == "none":
+			warnings.append("Invalid mod -- may not work correctly. Reinstall the mod.")
+		elif status == "parse_error":
+			var detail: String = entry.get("mod_txt_error", "")
+			if detail.is_empty():
+				warnings.append("Invalid mod -- mod.txt failed to parse. Reinstall the mod.")
+			else:
+				warnings.append("mod.txt parse error at " + detail)
+		elif status.begins_with("nested:"):
+			warnings.append("Invalid mod -- packaged incorrectly. Reinstall the mod.")
+	for dep_warn: String in entry.get("dependency_warnings", []):
+		warnings.append(dep_warn)
+	for dep_err: String in entry.get("dependency_errors", []):
+		warnings.append(dep_err)
 	return warnings
 
+
+func _parse_dependency_specs(value: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for raw_spec: String in _dependency_value_strings(value):
+		var spec := raw_spec.strip_edges()
+		if spec == "":
+			continue
+		var dep := _parse_dependency_spec(spec)
+		if not String(dep.get("id", "")).is_empty():
+			out.append(dep)
+	return out
+
+func _dependency_value_strings(value: Variant) -> Array[String]:
+	var out: Array[String] = []
+	if value is Array:
+		for item in value:
+			out.append_array(_dependency_value_strings(item))
+	elif value is PackedStringArray:
+		for item in value:
+			out.append(str(item))
+	else:
+		var text := str(value).replace("\r", "\n")
+		for chunk in text.split("\n", false):
+			for part in chunk.split(",", false):
+				var s := str(part).strip_edges()
+				if s != "":
+					out.append(s)
+	return out
+
+func _parse_dependency_spec(spec: String) -> Dictionary:
+	for op in [">=", "<=", "==", ">", "<", "="]:
+		var idx := spec.find(op)
+		if idx > 0:
+			return {
+				"id": spec.substr(0, idx).strip_edges(),
+				"op": "==" if op == "=" else op,
+				"version": spec.substr(idx + op.length()).strip_edges(),
+				"raw": spec,
+			}
+	return {"id": spec.strip_edges(), "op": "", "version": "", "raw": spec}
+
+func _resolve_entry_dependencies(entries: Array[Dictionary]) -> void:
+	var by_id: Dictionary = {}
+	for entry: Dictionary in entries:
+		by_id[str(entry.get("mod_id", "")).to_lower()] = entry
+	for entry: Dictionary in entries:
+		var errors: Array[String] = []
+		var warnings: Array[String] = []
+		for dep: Dictionary in entry.get("dependencies_required", []):
+			var issue := _dependency_issue(dep, by_id)
+			if issue != "":
+				errors.append(issue)
+		for dep: Dictionary in entry.get("dependencies_optional", []):
+			if not by_id.has(str(dep.get("id", "")).to_lower()):
+				warnings.append("Optional dependency not found: " + str(dep.get("raw", dep.get("id", ""))))
+		entry["dependency_errors"] = errors
+		entry["dependency_warnings"] = warnings
+		entry["dependency_blocked"] = errors.size() > 0
+		var combined: Array[String] = _build_entry_warnings(entry)
+		entry["warnings"] = combined
+
+func _dependency_issue(dep: Dictionary, by_id: Dictionary) -> String:
+	var dep_id := str(dep.get("id", "")).to_lower()
+	var raw := str(dep.get("raw", dep_id))
+	if not by_id.has(dep_id):
+		return "Missing required dependency: " + raw
+	var op := str(dep.get("op", ""))
+	var version := str(dep.get("version", ""))
+	if op == "":
+		return ""
+	var entry: Dictionary = by_id[dep_id]
+	var have := str(entry.get("version", ""))
+	var cmp := compare_versions(have, version)
+	var ok := false
+	match op:
+		">=":
+			ok = cmp >= 0
+		"<=":
+			ok = cmp <= 0
+		">":
+			ok = cmp > 0
+		"<":
+			ok = cmp < 0
+		"==":
+			ok = cmp == 0
+	if ok:
+		return ""
+	return "Required dependency version not met: %s (found %s)" % [raw, have if have != "" else "unversioned"]
 
 
 func _compare_load_order(a: Dictionary, b: Dictionary) -> bool:

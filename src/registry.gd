@@ -4,6 +4,10 @@ const Registry := {
 	SCENES = "scenes",
 	SCRIPTS = "scripts",
 	SCENE_NODES = "scene_nodes",
+	TOWERS = "towers",
+	UPGRADES = "upgrades",
+	LEVELS = "levels",
+	ABILITIES = "abilities",
 }
 
 var _registry_registered: Dictionary = {}
@@ -260,6 +264,26 @@ func find(registry: String, predicate: Callable, include_vanilla: bool = true) -
 		if entry != null and bool(predicate.call(entry)):
 			out.append({"id": String(id), "entry": entry})
 	return out
+
+func register_tower(id: String, data: Variant) -> bool: return register(Registry.TOWERS, id, data)
+func override_tower(id: String, data: Variant) -> bool: return override(Registry.TOWERS, id, data)
+func get_tower(id: String) -> Variant: return get_entry(Registry.TOWERS, id)
+func list_towers() -> Dictionary: return list(Registry.TOWERS)
+
+func register_upgrade(id: String, data: Variant) -> bool: return register(Registry.UPGRADES, id, data)
+func override_upgrade(id: String, data: Variant) -> bool: return override(Registry.UPGRADES, id, data)
+func get_upgrade(id: String) -> Variant: return get_entry(Registry.UPGRADES, id)
+func list_upgrades() -> Dictionary: return list(Registry.UPGRADES)
+
+func register_level(id: String, data: Variant) -> bool: return register(Registry.LEVELS, id, data)
+func override_level(id: String, data: Variant) -> bool: return override(Registry.LEVELS, id, data)
+func get_level(id: String) -> Variant: return get_entry(Registry.LEVELS, id)
+func list_levels() -> Dictionary: return list(Registry.LEVELS)
+
+func register_ability(id: String, data: Variant) -> bool: return register(Registry.ABILITIES, id, data)
+func override_ability(id: String, data: Variant) -> bool: return override(Registry.ABILITIES, id, data)
+func get_ability(id: String) -> Variant: return get_entry(Registry.ABILITIES, id)
+func list_abilities() -> Dictionary: return list(Registry.ABILITIES)
 
 
 func _generic_bundle_result(entries: Dictionary, label: String) -> Dictionary:

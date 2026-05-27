@@ -68,6 +68,11 @@ func _run_pass_1() -> void:
 
 	var sections := _build_autoload_sections()
 	var archive_paths := _collect_enabled_archive_paths()
+	if _filescope_mounts_differ_from(archive_paths):
+		_log_info("[OrcKit] Enabled mod set changed since static mount -- cleaning stale mounted mods and restarting")
+		_reset_cached_mod_state_for_restart()
+		_modloader_restart(true)
+		return
 
 	var new_hash := _compute_state_hash(archive_paths, sections.prepend)
 	var old_hash := ""
@@ -106,6 +111,33 @@ func _run_pass_1() -> void:
 		_static_wipe_hook_cache()
 		_log_info("[Hooks] Cleaned up unused hook artifacts")
 	await _finish_single_pass()
+
+func _filescope_mounts_differ_from(archive_paths: PackedStringArray) -> bool:
+	if _filescope_mounted.is_empty():
+		return false
+	var mounted: Array[String] = []
+	for p in _filescope_mounted.keys():
+		mounted.append(String(p))
+	var desired: Array[String] = []
+	for p in archive_paths:
+		desired.append(String(p))
+	mounted.sort()
+	desired.sort()
+	if mounted.size() != desired.size():
+		return true
+	for i in mounted.size():
+		if mounted[i] != desired[i]:
+			return true
+	return false
+
+func _reset_cached_mod_state_for_restart() -> void:
+	if FileAccess.file_exists(PASS_STATE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(PASS_STATE_PATH))
+	if FileAccess.file_exists(PASS2_DIRTY_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(PASS2_DIRTY_PATH))
+	_restore_clean_override_cfg()
+	_static_wipe_hook_cache()
+	_delete_heartbeat()
 
 func _finish_with_existing_mounts() -> void:
 	_boot_complete = true

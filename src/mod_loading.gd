@@ -19,6 +19,10 @@ func load_all_mods(pass_label: String = "") -> void:
 	for entry in _ui_mod_entries:
 		if not entry["enabled"]:
 			continue
+		if bool(entry.get("dependency_blocked", false)):
+			_log_warning("Skipping " + str(entry.get("mod_name", entry.get("file_name", "")))
+					+ " -- required dependencies are missing or incompatible.")
+			continue
 		candidates.append(entry.duplicate())
 	candidates.sort_custom(_compare_load_order)
 
@@ -71,6 +75,39 @@ func _merge_hook_calls_into_wrap_mask() -> void:
 			if not _hooked_methods.has(path):
 				_hooked_methods[path] = {}
 			(_hooked_methods[path] as Dictionary)[method.to_lower()] = true
+
+func _static_public_hook_targets(helper_name: String) -> Array[Dictionary]:
+	match helper_name:
+		"on_battle_start":
+			return [{"prefix": "battle", "method": "_ready"}]
+		"on_battle_end":
+			return [{"prefix": "battle", "method": "_end_battle"}]
+		"on_enemy_spawned":
+			return [{"prefix": "battle", "method": "_on_enemies_spawned"}]
+		"on_enemy_killed":
+			return [{"prefix": "battle", "method": "_on_enemies_killed"}]
+		"on_tower_placed":
+			return [{"prefix": "battle", "method": "add_tower"}]
+		"on_tower_removed":
+			return [{"prefix": "battle", "method": "remove_tower"}]
+		"on_level_loaded":
+			return [{"prefix": "battle", "method": "_ready"}]
+		"on_tech_tree_opened":
+			return [{"prefix": "menu", "method": "_on_tech_tree_pressed"}]
+		"on_upgrade_purchased":
+			return [{"prefix": "upgrade", "method": "buy"}]
+	return []
+
+func _record_static_hook_call(analysis: Dictionary, prefix: String, method: String) -> void:
+	var normalized_prefix := prefix.to_lower()
+	var normalized_method := method.to_lower()
+	for existing: Dictionary in (analysis["hook_calls"] as Array):
+		if existing["prefix"] == normalized_prefix and existing["method"] == normalized_method:
+			return
+	(analysis["hook_calls"] as Array).append({
+		"prefix": normalized_prefix,
+		"method": normalized_method,
+	})
 
 func _process_mod_candidate(c: Dictionary, load_index: int) -> void:
 	var file_name: String = c["file_name"]
@@ -389,13 +426,12 @@ func _scan_gd_source(text: String, analysis: Dictionary) -> void:
 	for m_hk in _re_hook_call.search_all(text):
 		var prefix := m_hk.get_string(1).to_lower()
 		var method := m_hk.get_string(2)
-		var already: bool = false
-		for existing: Dictionary in (analysis["hook_calls"] as Array):
-			if existing["prefix"] == prefix and existing["method"] == method:
-				already = true
-				break
-		if not already:
-			(analysis["hook_calls"] as Array).append({"prefix": prefix, "method": method})
+		_record_static_hook_call(analysis, prefix, method)
+
+	for m_pub in _re_public_hook_call.search_all(text):
+		var helper_name := m_pub.get_string(1)
+		for target: Dictionary in _static_public_hook_targets(helper_name):
+			_record_static_hook_call(analysis, target["prefix"], target["method"])
 
 	var func_matches := _re_func.search_all(text)
 

@@ -15,6 +15,41 @@ static func _static_force_vanilla_state(reason: String, log_lines: PackedStringA
 	_static_wipe_hook_cache()
 	log_lines.append("[FileScope] RESET (" + reason + "): wiped hook pack")
 
+static func _static_read_loose_loader_version() -> String:
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	var path := exe_dir.path_join("OrcLoader.gd")
+	if not FileAccess.file_exists(path):
+		return ""
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var text := f.get_as_text()
+	f.close()
+	var marker := 'const MODLOADER_VERSION := "'
+	var start := text.find(marker)
+	if start < 0:
+		return ""
+	start += marker.length()
+	var end := text.find('"', start)
+	if end <= start:
+		return ""
+	return text.substr(start, end - start)
+
+static func _static_compare_versions(a: String, b: String) -> int:
+	var pa := a.lstrip("vV").split(".")
+	var pb := b.lstrip("vV").split(".")
+	var n: int = max(pa.size(), pb.size())
+	for i in n:
+		var sa := pa[i] if i < pa.size() else "0"
+		var sb := pb[i] if i < pb.size() else "0"
+		var va := int(sa) if sa.is_valid_int() else 0
+		var vb := int(sb) if sb.is_valid_int() else 0
+		if va < vb:
+			return -1
+		if va > vb:
+			return 1
+	return 0
+
 static func _mount_previous_session() -> Dictionary:
 	var mounted: Dictionary = {}
 	var log_lines: PackedStringArray = []
@@ -29,6 +64,17 @@ static func _mount_previous_session() -> Dictionary:
 		_static_force_vanilla_state("pass 2 crashed mid-run", log_lines)
 		_write_filescope_log(log_lines)
 		return mounted
+
+	var loose_loader_version := _static_read_loose_loader_version()
+	if loose_loader_version != "" and loose_loader_version != MODLOADER_VERSION:
+		if _static_compare_versions(loose_loader_version, MODLOADER_VERSION) > 0:
+			_static_force_vanilla_state("loose OrcLoader.gd is newer than running loader", log_lines)
+			log_lines.append("[FileScope] WARNING: loose OrcLoader.gd is v%s but the running embedded loader is v%s. Cached hook packs were wiped, but the embedded loader must be updated/repacked before the new code can run." \
+					% [loose_loader_version, MODLOADER_VERSION])
+			_write_filescope_log(log_lines)
+			return mounted
+		log_lines.append("[FileScope] Note: loose OrcLoader.gd is v%s while running loader is v%s" \
+				% [loose_loader_version, MODLOADER_VERSION])
 
 
 	var cfg := ConfigFile.new()
